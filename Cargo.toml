@@ -1,0 +1,6 @@
+[package]
+name = "adventureformer"
+version = "0.1.0"
+authors = ["Resonious <metreckk@gmail.com>"]
+
+build = "build.rs"
