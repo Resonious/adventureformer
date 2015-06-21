@@ -35,16 +35,42 @@ type UpdateFn = extern "C" fn (
 );
 
 // Windows shit
+#[repr(C)]
+struct Win32SecurityAttributes {
+    length: i32, // always size_off::<Win32SecurityAttributes>()
+    security_descriptor: *const c_void,
+    inherit_handle:      bool
+}
+
+#[repr(C)]
+struct Win32FileNotifyInformation {
+    next_entry_offset: i32,
+    action:            i32,
+    file_name_length:  i32,
+    first_file_name_char: c_char
+}
+
 extern "C" {
     pub fn CreateFile(
         file_name:            *const c_char,
         desired_access:       i32,
         share_mode:           i32,
-        security_attributes:  *const c_void, // pointer to some struct
+        security_attributes:  *const Win32SecurityAttributes,
         creation_disposition: i32,
         flags_and_attributes: i32,
         template_file:        *const c_void
     ) -> *const c_void;
+
+    pub fn ReadDirectoryChangesW(
+        directory:          *const c_void, // Retrieved from CreateFile
+        buffer:             *const c_void, // Gets dynamically filled with Win32FileNotifyInformation
+        buffer_length:      i32,
+        watch_subtree:      bool,
+        notify_filter:      i32,
+        bytes_returned:     *const i32,
+        overlapped:         *const c_void,
+        completion_routine: *const c_void
+    ) -> bool;
 
     pub fn FindFirstChangeNotificationA(
         path:          *const c_char,
@@ -64,6 +90,15 @@ extern "C" {
 const INFINITE: i32 = 0xFFFFFFFF;
 const FILE_NOTIFY_CHANGE_LAST_WRITE: i32 = 0x00000010;
 const INVALID_HANDLE_VALUE: *const c_void = -1 as *const c_void;
+
+const FILE_LIST_DIRECTORY: i32 = 1;
+
+const FILE_SHARE_DELETE: i32 = 0x00000004;
+const FILE_SHARE_READ:   i32 = 0x00000001;
+const FILE_SHARE_WRITE:  i32 = 0x00000002;
+
+const FILE_ACTION_ADDED:    i32 = 0x00000001;
+const FILE_ACTION_MODIFIED: i32 = 0x00000003;
 
 // Glfw shit
 extern "C" {
