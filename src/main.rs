@@ -16,6 +16,8 @@ use std::mem::{transmute, uninitialized, drop};
 use std::sync::mpsc::channel;
 use std::sync::mpsc::{Sender, Receiver};
 use std::ffi::CString;
+use std::ptr;
+use std::slice;
 
 type LoadFn = extern "C" fn (
     bool, // first load?
@@ -36,22 +38,29 @@ type UpdateFn = extern "C" fn (
 
 // Windows shit
 #[repr(C)]
-struct Win32SecurityAttributes {
+pub struct Win32SecurityAttributes {
     length: i32, // always size_off::<Win32SecurityAttributes>()
     security_descriptor: *const c_void,
     inherit_handle:      bool
 }
 
 #[repr(C)]
-struct Win32FileNotifyInformation {
+pub struct Win32FileNotifyInformation {
     next_entry_offset: i32,
     action:            i32,
     file_name_length:  i32,
-    first_file_name_char: c_char
+    first_file_name_char: u16
+}
+
+impl Win32FileNotifyInformation {
+    pub fn file_name(&self) -> String { unsafe {
+        let v = slice::from_raw_parts(&self.first_file_name_char, self.file_name_length as usize);
+        String::from_utf16_lossy(v)
+    }}
 }
 
 extern "C" {
-    pub fn CreateFile(
+    pub fn CreateFileA(
         file_name:            *const c_char,
         desired_access:       i32,
         share_mode:           i32,
@@ -70,7 +79,7 @@ extern "C" {
         bytes_returned:     *const i32,
         overlapped:         *const c_void,
         completion_routine: *const c_void
-    ) -> bool;
+    ) -> i32;
 
     pub fn FindFirstChangeNotificationA(
         path:          *const c_char,
@@ -99,6 +108,10 @@ const FILE_SHARE_WRITE:  i32 = 0x00000002;
 
 const FILE_ACTION_ADDED:    i32 = 0x00000001;
 const FILE_ACTION_MODIFIED: i32 = 0x00000003;
+
+const FILE_ATTRIBUTE_NORMAL: i32 = 128;
+
+const OPEN_EXISTING: i32 = 3;
 
 // Glfw shit
 extern "C" {
@@ -139,46 +152,50 @@ fn load_symbols_from(lib: &DynamicLibrary) -> (LoadFn, UpdateFn) {
 
 unsafe fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
     let dylib_dir  = Path::new("./af/target/debug/");
-    let dylib_path = Path::new("./af/target/debug/af.dll");
-
-    let mut last_modified = match File::open(dylib_path) {
-        Ok(file) => match file.metadata() {
-            Ok(m)  => m.modified(),
-            Err(e) => panic!("Couldn't fetch dll metadata: {}", e)
-        },
-        Err(e) => panic!("Couldn't open {}: {}", dylib_path.display(), e)
-    };
+    // let dylib_path = Path::new("./af/target/debug/af.dll");
 
     let dylib_dir_str = CString::new(dylib_dir.to_str().unwrap()).unwrap();
-    let handle = FindFirstChangeNotificationA(dylib_dir_str.as_ptr(), false, FILE_NOTIFY_CHANGE_LAST_WRITE);
-
+    let handle = CreateFileA(
+        dylib_dir_str.as_ptr(),
+        FILE_LIST_DIRECTORY,
+        FILE_SHARE_DELETE|FILE_SHARE_READ|FILE_SHARE_WRITE,
+        ptr::null(),
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        ptr::null()
+    );
     if handle == INVALID_HANDLE_VALUE {
-        panic!("Failed to acquire file change notification handle from Windows: {}", GetLastError());
+        match GetLastError() {
+            5 => panic!("CreateFile for {} failed: Access denied", dylib_dir.display()),
+            error_code => panic!("CreateFile for {} failed: Error code {}", dylib_dir.display(), error_code)
+        }
     }
 
+    let mut results_buffer = [0u8; 1024];
+    let mut results_size: i32 = 0;
+
     loop {
-        match WaitForSingleObject(handle, INFINITE) {
-            // File was changed or created
-            0x00000000 => {
-                let lib_file = match File::open(dylib_path) {
-                    Ok(f)  => f,
-                    Err(e) => continue
-                };
-                let new_last_modified = match lib_file.metadata() {
-                    Ok(m)  => m.modified(),
-                    Err(e) => continue
-                };
+        match ReadDirectoryChangesW(
+            handle,
+            transmute(&results_buffer[0]),
+            results_buffer.len() as i32,
+            false,
+            FILE_NOTIFY_CHANGE_LAST_WRITE,
+            &results_size,
+            ptr::null(),
+            ptr::null()
+        ) {
+            0 => println!("Failed to listen for a lib change! {}", GetLastError()),
 
-                if new_last_modified != last_modified {
-                    println!("UPDATE THE DYLIB NOWW!!!");
-                    last_modified = new_last_modified;
-                    sender.send(());
+            _ => {
+                let result = transmute::<_, &Win32FileNotifyInformation>(&results_buffer[0]);
+                if result.next_entry_offset != 0 {
+                    panic!("YO, there are multiple entries. Handle that shit.");
                 }
+                let file_name = result.file_name();
+
+                println!("Detected change on {}", file_name);
             }
-
-            0xFFFFFFFF => panic!("Error occurred during directory wait! {}", GetLastError()),
-
-            _ => println!("Something happened but don't care.")
         }
     }
 }
@@ -205,7 +222,9 @@ fn main() {
 
     let (game_lib_sender, game_lib_receiver) = channel();
     unsafe {
-        thread::spawn(move || watch_for_updated_game_lib(&game_lib_sender));
+        thread::Builder::new().name("Game Lib Updater".to_string()).spawn(
+            move || watch_for_updated_game_lib(&game_lib_sender)
+        );
         // load(true, &_glfw, &window, &mut game_memory[0], &mut options_memory[0], &mut gl_memory[0]);
     }
     while !window.should_close() {
