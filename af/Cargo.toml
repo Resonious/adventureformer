@@ -1,9 +1,13 @@
 [package]
-name = "adventureformer"
+name = "af"
 version = "0.1.0"
 authors = ["Resonious <metreckk@gmail.com>"]
 
 build = "build.rs"
+
+[lib]
+name = "af"
+crate-type = ["dylib"]
 
 [build-dependencies]
 gl_generator = "*"
