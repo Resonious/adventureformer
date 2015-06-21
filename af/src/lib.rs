@@ -3,6 +3,7 @@ extern crate gl;
 
 use gl::types::*;
 use std::sync::mpsc::Receiver;
+use glfw::{Action, Context, Key};
 
 pub struct GLData {
     dummy: i64
@@ -23,9 +24,9 @@ pub extern "C" fn load(
     gl_data:    &mut GLData,
     glfw:       &glfw::Glfw,
     window:     &glfw::Window,
-    glfw_data:  *const u8,
+    // glfw_data:  *const u8,
 ) {
-    println!("LOAD yes");
+    println!("LOAD!");
     if first_load { println!("FIRST!"); }
     else          { println!("CONSECUTIVE!!"); }
 }
@@ -34,11 +35,23 @@ pub extern "C" fn load(
 pub extern "C" fn update(
     game:    &mut GameData,
     gl_data: &mut GLData,
-    glfw:    &glfw::Glfw,
-    window:  &glfw::Window,
-    event:   &Receiver<(f64, glfw::WindowEvent)>
+    glfw:    &mut glfw::Glfw,
+    window:  &mut glfw::Window,
+    events:  &Receiver<(f64, glfw::WindowEvent)>
 ) {
-    println!("UPDATE? RENDER?");
+    glfw.poll_events();
+
+    for (_, event) in glfw::flush_messages(&events) {
+        match event {
+            glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
+                window.set_should_close(true)
+            }
+            glfw::WindowEvent::Key(key, _, Action::Press, _) => {
+                println!("YOU PRESSED {:?}", key);
+            }
+            _ => {}
+        }
+    }
 }
 
 #[test]

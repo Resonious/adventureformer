@@ -25,7 +25,7 @@ type LoadFn = extern "C" fn (
     &mut u8, // GLData
     &glfw::Glfw,
     &glfw::Window,
-    *const u8 // glfw _data
+    // *const u8 // glfw _data
 );
 
 type UpdateFn = extern "C" fn (
@@ -98,6 +98,7 @@ extern "C" {
 }
 const INFINITE: i32 = 0xFFFFFFFF;
 const FILE_NOTIFY_CHANGE_LAST_WRITE: i32 = 0x00000010;
+const FILE_NOTIFY_CHANGE_CREATION: i32 = 0x00000040;
 const INVALID_HANDLE_VALUE: *const c_void = -1 as *const c_void;
 
 const FILE_LIST_DIRECTORY: i32 = 1;
@@ -110,12 +111,13 @@ const FILE_ACTION_ADDED:    i32 = 0x00000001;
 const FILE_ACTION_MODIFIED: i32 = 0x00000003;
 
 const FILE_ATTRIBUTE_NORMAL: i32 = 128;
+const FILE_FLAG_BACKUP_SEMANTICS: i32 = 0x02000000;
 
 const OPEN_EXISTING: i32 = 3;
 
 // Glfw shit
 extern "C" {
-    static _glfw: u8;
+    pub static _glfw: u8;
 }
 
 fn copy_game_lib_to_cwd() {
@@ -136,12 +138,12 @@ fn load_game_lib() -> DynamicLibrary {
 
 fn load_symbols_from(lib: &DynamicLibrary) -> (LoadFn, UpdateFn) {
     unsafe {
-        let load: LoadFn = match lib.symbol::<u8>("update") {
+        let load: LoadFn = match lib.symbol::<u8>("load") {
             Ok(f) => transmute(f),
             Err(e) => panic!("Couldn't grab update symbol from game lib! {}", e)
         };
 
-        let update: UpdateFn = match lib.symbol::<u8>("load") {
+        let update: UpdateFn = match lib.symbol::<u8>("update") {
             Ok(f) => transmute(f),
             Err(e) => panic!("Couldn't grab load symbol from game lib! {}", e)
         };
@@ -161,7 +163,7 @@ unsafe fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
         FILE_SHARE_DELETE|FILE_SHARE_READ|FILE_SHARE_WRITE,
         ptr::null(),
         OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL,
+        FILE_FLAG_BACKUP_SEMANTICS,
         ptr::null()
     );
     if handle == INVALID_HANDLE_VALUE {
@@ -194,7 +196,11 @@ unsafe fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
                 }
                 let file_name = result.file_name();
 
-                println!("Detected change on {}", file_name);
+                // NOTE Windows seems to just give back garbage string sizes, so
+                // this file name is 'af.dll' fused with 'af.metadata.o'
+                if file_name == "af.dlladata." {
+                    sender.send(());
+                }
             }
         }
     }
@@ -225,27 +231,38 @@ fn main() {
         thread::Builder::new().name("Game Lib Updater".to_string()).spawn(
             move || watch_for_updated_game_lib(&game_lib_sender)
         );
-        // load(true, &_glfw, &window, &mut game_memory[0], &mut options_memory[0], &mut gl_memory[0]);
+        load(
+            true,
+            transmute(&mut game_memory[0]),
+            transmute(&mut gl_memory[0]),
+            &glfw, &window
+        );
     }
-    while !window.should_close() {
-        match game_lib_receiver.try_recv() {
-            Ok(()) => {
-                drop(game_lib);
-                copy_game_lib_to_cwd();
-                game_lib = load_game_lib();
-                match load_symbols_from(&game_lib) { (l, u) => { load = l; update = u } }
-            }
-            _ => {}
-        }
 
-        glfw.poll_events();
-        for (_, event) in glfw::flush_messages(&events) {
-            match event {
-                glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
-                    window.set_should_close(true)
+    while !window.should_close() {
+        unsafe {
+            match game_lib_receiver.try_recv() {
+                Ok(()) => {
+                    drop(game_lib);
+                    copy_game_lib_to_cwd();
+                    game_lib = load_game_lib();
+                    match load_symbols_from(&game_lib) { (l, u) => { load = l; update = u } }
+
+                    load(
+                        false,
+                        transmute(&mut game_memory[0]),
+                        transmute(&mut gl_memory[0]),
+                        &glfw, &window
+                    );
                 }
                 _ => {}
             }
+
+            update(
+                transmute(&mut game_memory[0]),
+                transmute(&mut gl_memory[0]),
+                &glfw, &window, &events
+            );
         }
     }
 }
