@@ -1,3 +1,4 @@
 target
 af.dll
+clib/*.a
 *.swp

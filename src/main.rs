@@ -38,12 +38,14 @@ type UpdateFn = extern "C" fn (
 
 // Windows shit
 #[repr(C)]
+#[cfg(windows]
 pub struct Win32SecurityAttributes {
     length: i32, // always size_off::<Win32SecurityAttributes>()
     security_descriptor: *const c_void,
     inherit_handle:      bool
 }
 
+#[cfg(windows)]
 #[repr(C)]
 pub struct Win32FileNotifyInformation {
     next_entry_offset: i32,
@@ -52,6 +54,7 @@ pub struct Win32FileNotifyInformation {
     first_file_name_char: u16
 }
 
+#[cfg(windows)]
 impl Win32FileNotifyInformation {
     pub fn file_name(&self) -> String { unsafe {
         let v = slice::from_raw_parts(&self.first_file_name_char, self.file_name_length as usize);
@@ -59,6 +62,7 @@ impl Win32FileNotifyInformation {
     }}
 }
 
+#[cfg(windows)]
 extern "C" {
     pub fn CreateFileA(
         file_name:            *const c_char,
@@ -115,20 +119,33 @@ const FILE_FLAG_BACKUP_SEMANTICS: i32 = 0x02000000;
 
 const OPEN_EXISTING: i32 = 3;
 
+
+const GAME_LIB_DIR: str = "./af/target/debug/";
+
+#[cfg(linux)]
+const GAME_LIB_PATH: str = "./af/target/debug/af.so";
+#[cfg(windows)]
+const GAME_LIB_PATH: str = "./af/target/debug/af.dll";
+
+#[cfg(linux)]
+const GAME_LIB_FILE: str = "./af.so";
+#[cfg(windows)]
+const GAME_LIB_FILE: str = "./af.dll";
+
 // Glfw shit
 extern "C" {
     pub static _glfw: u8;
 }
 
 fn copy_game_lib_to_cwd() {
-    match fs::copy("./af/target/debug/af.dll", "./af.dll") {
+    match fs::copy(GAME_LIB_PATH, GAME_LIB_FILE) {
         Err(e) => panic!("Couldn't copy af.dll: {}", e),
         _ => {}
     }
 }
 
 fn load_game_lib() -> DynamicLibrary {
-    let dylib_path = Path::new("./af.dll");
+    let dylib_path = Path::new(GAME_LIB_FILE);
 
     match DynamicLibrary::open(Some(dylib_path)) {
         Ok(lib) => lib,
@@ -152,9 +169,9 @@ fn load_symbols_from(lib: &DynamicLibrary) -> (LoadFn, UpdateFn) {
     }
 }
 
+#[cfg(windows)]
 unsafe fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
-    let dylib_dir  = Path::new("./af/target/debug/");
-    // let dylib_path = Path::new("./af/target/debug/af.dll");
+    let dylib_dir  = Path::new(GAME_LIB_DIR);
 
     let dylib_dir_str = CString::new(dylib_dir.to_str().unwrap()).unwrap();
     let handle = CreateFileA(
@@ -204,6 +221,11 @@ unsafe fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
             }
         }
     }
+}
+
+#[cfg(linux)]
+fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
+    println!("on linux machine - no dynamic update for now!");
 }
 
 fn main() {
