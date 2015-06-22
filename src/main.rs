@@ -38,7 +38,7 @@ type UpdateFn = extern "C" fn (
 
 // Windows shit
 #[repr(C)]
-#[cfg(windows]
+#[cfg(windows)]
 pub struct Win32SecurityAttributes {
     length: i32, // always size_off::<Win32SecurityAttributes>()
     security_descriptor: *const c_void,
@@ -120,17 +120,16 @@ const FILE_FLAG_BACKUP_SEMANTICS: i32 = 0x02000000;
 const OPEN_EXISTING: i32 = 3;
 
 
-const GAME_LIB_DIR: str = "./af/target/debug/";
-
-#[cfg(linux)]
-const GAME_LIB_PATH: str = "./af/target/debug/af.so";
+static GAME_LIB_DIR: &'static str = "./af/target/debug/";
+#[cfg(unix)]
+static GAME_LIB_PATH: &'static str = "./af/target/debug/libaf.so";
 #[cfg(windows)]
-const GAME_LIB_PATH: str = "./af/target/debug/af.dll";
+static GAME_LIB_PATH: &'static str = "./af/target/debug/af.dll";
 
-#[cfg(linux)]
-const GAME_LIB_FILE: str = "./af.so";
+#[cfg(unix)]
+static GAME_LIB_FILE: &'static str = "./libaf.so";
 #[cfg(windows)]
-const GAME_LIB_FILE: str = "./af.dll";
+static GAME_LIB_FILE: &'static str = "./af.dll";
 
 // Glfw shit
 extern "C" {
@@ -139,7 +138,7 @@ extern "C" {
 
 fn copy_game_lib_to_cwd() {
     match fs::copy(GAME_LIB_PATH, GAME_LIB_FILE) {
-        Err(e) => panic!("Couldn't copy af.dll: {}", e),
+        Err(e) => panic!("Couldn't copy {}: {}", GAME_LIB_PATH, e),
         _ => {}
     }
 }
@@ -223,9 +222,9 @@ unsafe fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
     }
 }
 
-#[cfg(linux)]
+#[cfg(unix)]
 fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
-    println!("on linux machine - no dynamic update for now!");
+    println!("on linux machine - no hot code update for now!");
 }
 
 fn main() {

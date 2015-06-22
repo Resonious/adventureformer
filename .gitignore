@@ -1,4 +1,5 @@
 target
 af.dll
+libaf.so
 clib/*.a
 *.swp
