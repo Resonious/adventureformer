@@ -1,9 +1,11 @@
 extern crate glfw;
 extern crate gl;
+extern crate libc;
 
 use gl::types::*;
 use std::sync::mpsc::Receiver;
 use glfw::{Action, Context, Key};
+use libc::{c_void};
 
 pub struct GLData {
     dummy: i64
@@ -14,7 +16,8 @@ pub struct GameData {
 }
 
 extern "C" {
-    static _glfw: u8;
+    // Supplied by Resonious' glfw fork
+    fn glfwSet(newGlfw: *const c_void);
 }
 
 #[no_mangle]
@@ -24,9 +27,10 @@ pub extern "C" fn load(
     gl_data:    &mut GLData,
     glfw:       &glfw::Glfw,
     window:     &glfw::Window,
-    // glfw_data:  *const u8,
+    glfw_data:  *const c_void,
 ) {
     println!("LOAD!");
+    unsafe { glfwSet(glfw_data) };
     if first_load { println!("FIRST!"); }
     else          { println!("CONSECUTIVE!!"); }
 }

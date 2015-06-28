@@ -25,7 +25,7 @@ type LoadFn = extern "C" fn (
     &mut u8, // GLData
     &glfw::Glfw,
     &glfw::Window,
-    // *const u8 // glfw _data
+    *const c_void // glfw _data
 );
 
 type UpdateFn = extern "C" fn (
@@ -133,7 +133,7 @@ static GAME_LIB_FILE: &'static str = "./af.dll";
 
 // Glfw shit
 extern "C" {
-    pub static _glfw: u8;
+    pub static _glfw: *const c_void;
 }
 
 fn copy_game_lib_to_cwd() {
@@ -256,7 +256,8 @@ fn main() {
             true,
             transmute(&mut game_memory[0]),
             transmute(&mut gl_memory[0]),
-            &glfw, &window
+            &glfw, &window,
+            _glfw
         );
     }
 
@@ -273,7 +274,8 @@ fn main() {
                         false,
                         transmute(&mut game_memory[0]),
                         transmute(&mut gl_memory[0]),
-                        &glfw, &window
+                        &glfw, &window,
+                        _glfw
                     );
                 }
                 _ => {}
