@@ -125,6 +125,55 @@ macro_rules! make_shader(
     )
 );
 
+#[derive(Clone)]
+pub struct SpriteData {
+    pub position: Vec2<GLfloat>,
+    pub frame: GLint,
+    pub flipped: GLint
+}
+
+impl Copy for SpriteData { }
+
+impl SpriteData {
+    fn set(&self, vbo: GLuint) {
+        unsafe {
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+            let size_of_sprite = size_of::<SpriteData>() as GLint;
+            assert_eq!(size_of_sprite, 16);
+
+            // == Position ==
+            gl::EnableVertexAttribArray(ATTR_POSITION);
+            gl::VertexAttribPointer(
+                ATTR_POSITION, 2, gl::FLOAT, gl::FALSE as GLboolean,
+                size_of_sprite, transmute(0 as isize)
+            );
+            gl::VertexAttribDivisor(ATTR_POSITION, 1);
+            let mut offset = 2 * size_of::<GLfloat>() as i64;
+            assert_eq!(offset, 8);
+
+            // == Frame ==
+            gl::EnableVertexAttribArray(ATTR_FRAME);
+            gl::VertexAttribIPointer(
+                ATTR_FRAME, 1, gl::INT,
+                size_of_sprite, transmute(offset)
+            );
+            gl::VertexAttribDivisor(ATTR_FRAME, 1);
+            offset += 1 * size_of::<GLint>() as i64;
+            assert_eq!(offset, 12);
+
+            // == Flipped ==
+            gl::EnableVertexAttribArray(ATTR_FLIPPED);
+            gl::VertexAttribIPointer(
+                ATTR_FLIPPED, 1, gl::INT,
+                size_of_sprite, transmute(offset)
+            );
+            gl::VertexAttribDivisor(ATTR_FLIPPED, 1);
+
+            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+        }
+    }
+}
+
 pub struct Texcoords {
     pub top_right:    Vec2<GLfloat>,
     pub bottom_right: Vec2<GLfloat>,

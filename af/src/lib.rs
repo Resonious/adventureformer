@@ -10,9 +10,10 @@ use std::sync::mpsc::Receiver;
 use glfw::{Action, Context, Key};
 use libc::{c_void};
 use vecmath::Vec2;
+use std::ffi::CString;
 use std::mem::{size_of, size_of_val, transmute};
 use std::ptr;
-use render::{Texture, Frame, Texcoords};
+use render::{Texture, Frame, Texcoords, SpriteData};
 
 static SQUARE_VERTICES: [GLfloat; 8] = [
 //    position
@@ -31,10 +32,12 @@ macro_rules! stride(
 );
 
 pub struct GLData {
+    // === Global buffers ===
     pub vao: GLuint,
     pub square_vbo: GLuint,
     pub square_ebo: GLuint,
 
+    // === Shader information ===
     pub shader_prog:         GLuint,
     pub cam_pos_uniform:     GLint,
     pub scale_uniform:       GLint,
@@ -43,20 +46,28 @@ pub struct GLData {
     pub tex_uniform:         GLint,
     pub frames_uniform:      GLint,
 
-    pub front_foot_tex: Texture,
-    pub body_tex: Texture,
-    pub back_foot_tex: Texture
+    // === Hardcoded textures/texcoords ===
+    pub front_foot_tex:       Texture,
+    pub front_foot_texcoords: [Texcoords; 9],
+    pub body_tex:       Texture,
+    pub body_texcoords: [Texcoords; 9],
+    pub back_foot_tex:       Texture,
+    pub back_foot_texcoords: [Texcoords; 9],
 }
 
 pub struct GameData {
+    cam_pos: Vec2<f32>,
+
     front_foot_frames: [Frame; 9],
-    body_frames: [Frame; 9],
-    back_foot_frames: [Frame; 9]
+    body_frames:       [Frame; 9],
+    back_foot_frames:  [Frame; 9]
+
+        // TODO place a SpriteData somewhere and see how it goes
 }
 
 extern "C" {
     // Supplied by Resonious' glfw fork
-    fn glfwSet(newGlfw: *const c_void);
+    fn glfwSet(new_glfw: *const c_void);
 }
 
 #[no_mangle]
@@ -72,6 +83,9 @@ pub unsafe extern "C" fn load(
     glfwSet(glfw_data);
     gl::load_with(|s| window.get_proc_address(s));
     if first_load {
+        game.cam_pos.x = 0.0;
+        game.cam_pos.y = 0.0;
+
         // === Crattlecrute textures ===
         gl_data.front_foot_tex = render::load_texture("assets/crattlecrute/front-foot.png");
         gl_data.front_foot_tex.add_frames(&mut game.front_foot_frames, 90, 90);
@@ -113,11 +127,65 @@ pub unsafe extern "C" fn load(
             gl::STATIC_DRAW
         );
 
-
+        if !compile_shaders(gl_data, game, window) {
+            panic!("Cannot continue due to shader error.");
+        }
+        gl_data.front_foot_tex.generate_texcoords_buffer(&mut gl_data.front_foot_texcoords);
+        gl_data.body_tex.generate_texcoords_buffer(&mut gl_data.body_texcoords);
+        gl_data.back_foot_tex.generate_texcoords_buffer(&mut gl_data.back_foot_texcoords);
     }
     else {
-        // TODO reload shaders?
+        if !compile_shaders(gl_data, game, window) {
+            println!("Shaders not reloaded.");
+        }
     }
+}
+
+fn compile_shaders(gl_data: &mut GLData, game: &GameData, window: &glfw::Window) -> bool {
+    let existing_program = unsafe {
+        if gl::IsProgram(gl_data.shader_prog) == gl::TRUE {
+            Some(gl_data.shader_prog)
+        } else { None }
+    };
+
+    gl_data.shader_prog = match render::create_program(render::STANDARD_VERTEX, render::STANDARD_FRAGMENT) {
+        Some(program) => program,
+        None          => return false
+    };
+    unsafe {
+        gl::UseProgram(gl_data.shader_prog);
+
+        let cam_pos_str         = CString::new("cam_pos".to_string()).unwrap();
+        gl_data.cam_pos_uniform = gl::GetUniformLocation(gl_data.shader_prog, cam_pos_str.as_ptr());
+
+        let scale_str         = CString::new("scale".to_string()).unwrap();
+        gl_data.scale_uniform = gl::GetUniformLocation(gl_data.shader_prog, scale_str.as_ptr());
+
+        let sprite_size_str         = CString::new("sprite_size".to_string()).unwrap();
+        gl_data.sprite_size_uniform = gl::GetUniformLocation(gl_data.shader_prog, sprite_size_str.as_ptr());
+
+        let screen_size_str         = CString::new("screen_size".to_string()).unwrap();
+        gl_data.screen_size_uniform = gl::GetUniformLocation(gl_data.shader_prog, screen_size_str.as_ptr());
+
+        let tex_str         = CString::new("tex".to_string()).unwrap();
+        gl_data.tex_uniform = gl::GetUniformLocation(gl_data.shader_prog, tex_str.as_ptr());
+
+        let frames_str         = CString::new("frames".to_string()).unwrap();
+        gl_data.frames_uniform = gl::GetUniformLocation(gl_data.shader_prog, frames_str.as_ptr());
+
+        gl::Uniform2f(gl_data.cam_pos_uniform, game.cam_pos.x, game.cam_pos.y);
+        gl::Uniform1f(gl_data.scale_uniform, 2.0);
+        match window.get_size() {
+            (width, height) => gl::Uniform2f(gl_data.screen_size_uniform, width as f32, height as f32)
+        }
+
+        match existing_program {
+            Some(program) => gl::DeleteProgram(program),
+            _ => {}
+        }
+    }
+
+    true
 }
 
 #[no_mangle]
