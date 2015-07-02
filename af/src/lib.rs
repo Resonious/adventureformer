@@ -12,6 +12,7 @@ use libc::{c_void};
 use vecmath::Vec2;
 use std::mem::{size_of, size_of_val, transmute};
 use std::ptr;
+use render::{Texture, Frame, Texcoords};
 
 static SQUARE_VERTICES: [GLfloat; 8] = [
 //    position
@@ -42,10 +43,15 @@ pub struct GLData {
     pub tex_uniform:         GLint,
     pub frames_uniform:      GLint,
 
+    pub front_foot_tex: Texture,
+    pub body_tex: Texture,
+    pub back_foot_tex: Texture
 }
 
 pub struct GameData {
-    dummy: i64
+    front_foot_frames: [Frame; 9],
+    body_frames: [Frame; 9],
+    back_foot_frames: [Frame; 9]
 }
 
 extern "C" {
@@ -66,6 +72,17 @@ pub unsafe extern "C" fn load(
     glfwSet(glfw_data);
     gl::load_with(|s| window.get_proc_address(s));
     if first_load {
+        // === Crattlecrute textures ===
+        gl_data.front_foot_tex = render::load_texture("assets/crattlecrute/front-foot.png");
+        gl_data.front_foot_tex.add_frames(&mut game.front_foot_frames, 90, 90);
+
+        gl_data.body_tex = render::load_texture("assets/crattlecrute/body.png");
+        gl_data.body_tex.add_frames(&mut game.body_frames, 90, 90);
+
+        gl_data.back_foot_tex = render::load_texture("assets/crattlecrute/back-foot.png");
+        gl_data.back_foot_tex.add_frames(&mut game.back_foot_frames, 90, 90);
+
+        // === Blending for alpha ===
         gl::Enable(gl::BLEND);
         gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
@@ -95,6 +112,8 @@ pub unsafe extern "C" fn load(
             transmute(&SQUARE_INDICES[0]),
             gl::STATIC_DRAW
         );
+
+
     }
     else {
         // TODO reload shaders?
