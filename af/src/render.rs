@@ -113,10 +113,11 @@ macro_rules! check_log(
 );
 
 macro_rules! make_shader(
-    ($name:ident: $shader_type:ident) => (
+    (($name:expr): $shader_type:ident) => (
         unsafe {
             let sh = gl::CreateShader(gl::$shader_type);
-            let shader_src_str = CString::new($name.to_string()).unwrap();
+            // TODO right here is where we'd call shader string function?
+            let shader_src_str = CString::new($name).unwrap();
             gl::ShaderSource(sh, 1, &shader_src_str.as_ptr(), ptr::null());
             gl::CompileShader(sh);
             sh
@@ -126,18 +127,18 @@ macro_rules! make_shader(
 
 // TODO in the future, we can do SpriteType2 that adds rotation/scaling etc.
 #[derive(Clone)]
-pub struct SpriteType1 {
+pub struct OldSpriteType1 {
     pub position: Vec2<GLfloat>,
     pub frame: GLint,
     pub flipped: GLint
 }
-impl Copy for SpriteType1 { }
+impl Copy for OldSpriteType1 { }
 
-impl SpriteType1 {
+impl OldSpriteType1 {
     pub fn set(vbo: GLuint) {
         unsafe {
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            let size_of_sprite = size_of::<SpriteType1>() as GLint;
+            let size_of_sprite = size_of::<OldSpriteType1>() as GLint;
             assert_eq!(size_of_sprite, 16);
 
             // == Position ==
@@ -172,6 +173,185 @@ impl SpriteType1 {
         }
     }
 }
+
+macro_rules! vertex_attrib_pointer {
+    (float, $loc:expr, $size:expr, $offset:expr) => {
+        gl::VertexAttribPointer(
+            $loc, 1, gl::FLOAT, gl::FALSE as GLboolean,
+            $size, transmute($offset)
+        );
+    };
+    (vec2, $loc:expr, $size:expr, $offset:expr) => {
+        gl::VertexAttribPointer(
+            $loc, 2, gl::FLOAT, gl::FALSE as GLboolean,
+            $size, transmute($offset)
+        );
+    };
+    ($int_type:ident, $loc:expr, $size:expr, $offset:expr) => {
+        gl::VertexAttribIPointer(
+            $loc, 1, gl::INT,
+            $size, transmute($offset)
+        );
+    };
+}
+
+macro_rules! gen_shader {
+    (
+        $sprite_type:ident
+        [vertex]
+            $(layout (location = $loc:expr) in $glsltype:ident($attrtype:ty) $name:ident;)*
+            ($vertmain:expr)
+        [fragment]
+            ($fragmain:expr)
+    ) => {
+        #[derive(Clone)]
+        pub struct $sprite_type {
+            $( pub $name: $attrtype ),*
+        }
+        impl Copy for $sprite_type { }
+
+        impl $sprite_type {
+            pub unsafe fn set(vbo: GLuint) {
+                gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+
+                let size_of_sprite = size_of::<$sprite_type>() as GLint;
+                let mut offset: i64 = 0;
+
+                $(
+                    gl::EnableVertexAttribArray($loc);
+                    vertex_attrib_pointer!(
+                        $glsltype, $loc,
+                        size_of_sprite, offset
+                    );
+                    gl::VertexAttribDivisor($loc, 1);
+                    offset += size_of::<$attrtype>() as i64;
+                )*
+
+                gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+            }
+
+            pub fn vertex_shader() -> String {
+                let mut vertex = String::with_capacity(4092);
+                vertex.push_str("
+                    #version 330 core
+
+                    // Per vertex, normalized:
+                    layout (location = 0) in vec2 vertex_pos;
+                    // Per instance:
+                ");
+                $({
+                    if $loc == 0 { panic!("Shader location 0 is reserved for vertex position") }
+                    vertex.push_str(&format!("layout (location = {}) in {} {};\n",
+                        $loc, stringify!($glsltype), stringify!($name)
+                    ));
+                });*
+
+                vertex.push_str("
+                    // NOTE up this if you run into problems
+                    uniform vec2[256] frames;
+                    uniform vec2 screen_size;
+                    uniform vec2 cam_pos;     // in pixels
+                    uniform vec2 sprite_size; // in pixels
+                    uniform float scale;
+
+                    out vec2 texcoord;
+
+                    const vec2 TEXCOORD_FROM_ID[4] = vec2[4](
+                        vec2(1.0, 1.0), vec2(1.0, 0.0),
+                        vec2(0.0, 0.0), vec2(0.0, 1.0)
+                    );
+
+                    vec2 from_pixel(vec2 pos)
+                    {
+                        return pos / screen_size;
+                    }
+
+                    int flipped_vertex_id()
+                    {
+                        return 3 - gl_VertexID;
+                    }
+                ");
+                vertex.push_str($vertmain);
+                println!("VERTEX:\n{}", vertex);
+                vertex
+            }
+
+            pub fn fragment_shader() -> String {
+                let mut fragment = String::with_capacity(1028);
+                fragment.push_str("
+                    #version 330 core
+                    in vec2 texcoord;
+                    out vec4 color;
+                    uniform sampler2D tex;
+                ");
+                fragment.push_str($fragmain);
+
+                println!("FRAGMENT:\n{}", fragment);
+                fragment
+            }
+        }
+    }
+}
+
+gen_shader!(
+    SpriteType1
+
+    [vertex]
+        layout (location = 1) in vec2(Vec2<GLfloat>) position; // in pixels
+        layout (location = 2) in int(GLint) frame;
+        layout (location = 3) in int(GLint) flipped;   // actually a bool
+    ("
+     void main()
+     {
+        vec2 pixel_screen_pos = (position - cam_pos) * 2;
+        gl_Position = vec4(
+            (vertex_pos * from_pixel(sprite_size) + from_pixel(pixel_screen_pos)) * scale,
+            0.0f, 1.0f
+        );
+        int index = flipped != 0 ? flipped_vertex_id() : gl_VertexID;
+        if (frame == -1)
+            texcoord = TEXCOORD_FROM_ID[index];
+        else
+            texcoord = frames[frame * 4 + index];
+        texcoord.y = 1 - texcoord.y;
+     }
+     ")
+
+    [fragment]
+    ("
+     void main()
+     {
+        color = texture(tex, texcoord);
+     }
+     ")
+);
+
+/*
+#[test]
+fn gen_shader_works() {
+    gen_shader!(
+    [vertex]
+        layout (location = 1) in vec2 mytype;
+        layout (location = 2) in float yessss;
+        ("
+        void main()
+        {
+            // omg
+            gl_Position = vec4(mytype, yesss, 0.0f);
+        }
+        ")
+    [fragment]
+        ("
+        void main()
+        {
+            //omg!!
+            color = wtf;
+        }
+        ")
+    );
+    panic!(":)");
+}
+*/
 
 pub struct Texcoords {
     pub top_right:    Vec2<GLfloat>,
@@ -441,8 +621,8 @@ pub fn load_texture(filename: &'static str) -> Texture {
     }
 }
 
-pub fn create_program(vert: &str, frag: &str) -> Option<GLuint> {
-    let vert_id = make_shader!(vert: VERTEX_SHADER);
+pub fn create_program(vert: String, frag: String) -> Option<GLuint> {
+    let vert_id = make_shader!((vert): VERTEX_SHADER);
     let vert_result: bool = check_log!(
         "VERTEX SHADER",
         GetShaderiv | GetShaderInfoLog
@@ -454,7 +634,7 @@ pub fn create_program(vert: &str, frag: &str) -> Option<GLuint> {
         return None;
     }
 
-    let frag_id = make_shader!(frag: FRAGMENT_SHADER);
+    let frag_id = make_shader!((frag): FRAGMENT_SHADER);
     let frag_result: bool = check_log!(
         "FRAGMENT SHADER",
         GetShaderiv | GetShaderInfoLog

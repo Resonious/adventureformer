@@ -2,7 +2,7 @@ use std::mem::zeroed;
 use render::{ImageAsset, Texcoords};
 
 macro_rules! image_assets {
-    ($($texcoords_name:ident $name:ident [$texcoords:expr][$w:expr;$h:expr] $path:expr),+) =>  {
+    ($($texcoords_name:ident $name:ident: $sprite_type:ty [$texcoords:expr][$w:expr;$h:expr] $path:expr),+) =>  {
 
     pub struct Images {
         $(
@@ -30,7 +30,7 @@ macro_rules! image_assets {
 }
 
 image_assets!(
-    ccbdy crattlecrute_body       [9][90;90] "assets/crattlecrute/body.png",
-    ccbft crattlecrute_back_foot  [9][90;90] "assets/crattlecrute/back-foot.png",
-    ccfft crattlecrute_front_foot [9][90;90] "assets/crattlecrute/front-foot.png"
+    ccbdy crattlecrute_body:       SpriteType1 [9][90;90] "assets/crattlecrute/body.png",
+    ccbft crattlecrute_back_foot:  SpriteType1 [9][90;90] "assets/crattlecrute/back-foot.png",
+    ccfft crattlecrute_front_foot: SpriteType1 [9][90;90] "assets/crattlecrute/front-foot.png"
 );

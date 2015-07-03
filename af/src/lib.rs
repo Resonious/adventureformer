@@ -159,7 +159,7 @@ fn compile_shaders(gl_data: &mut GLData, game: &GameData, window: &glfw::Window)
         } else { None }
     };
 
-    gl_data.shader_prog = match render::create_program(render::STANDARD_VERTEX, render::STANDARD_FRAGMENT) {
+    gl_data.shader_prog = match render::create_program(SpriteType1::vertex_shader(), SpriteType1::fragment_shader()) {
         Some(program) => program,
         None          => return false
     };
