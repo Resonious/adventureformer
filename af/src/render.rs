@@ -40,6 +40,7 @@ pub static STANDARD_VERTEX: &'static str = "
         layout (location = 2) in int frame;
         layout (location = 3) in int flipped; // actually a bool
 
+        // NOTE up this if you run into problems
         uniform vec2[256] frames;
         uniform vec2 screen_size;
         uniform vec2 cam_pos;     // in pixels
@@ -47,8 +48,6 @@ pub static STANDARD_VERTEX: &'static str = "
         uniform float scale;
 
         out vec2 texcoord;
-        int call_index = 0;
-
         const vec2 TEXCOORD_FROM_ID[4] = vec2[4](
             vec2(1.0, 1.0), vec2(1.0, 0.0),
             vec2(0.0, 0.0), vec2(0.0, 1.0)
@@ -77,8 +76,6 @@ pub static STANDARD_VERTEX: &'static str = "
             else
                 texcoord = frames[frame * 4 + index];
             texcoord.y = 1 - texcoord.y;
-            call_index += 1;
-            if (call_index >= 6) call_index = 0;
         }
     ";
 
@@ -285,9 +282,11 @@ impl Texture {
         }
     }
 
+    /*
     fn put_texcoord(&mut self, index: usize, texcoord: Texcoords) {
         self.texcoords_mut()[index] = texcoord;
     }
+    */
 
     // NOTE this should be properly merged with add_frames.
     pub fn generate_texcoords_buffer(
@@ -384,8 +383,16 @@ impl ImageAsset {
         self.texture = texture;
 
         gl::GenBuffers(1, &mut self.vbo);
+    }
+
+    pub unsafe fn empty_buffer_data<SpriteType>(&mut self, count: i64, draw: GLenum) {
         gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
-        // NOTE that this doesn't do gl::BufferData for now.
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            count * size_of::<SpriteType>() as GLsizeiptr,
+            ptr::null(),
+            draw
+        );
     }
 
     pub unsafe fn unload(&mut self) {
