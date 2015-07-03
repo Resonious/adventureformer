@@ -15,7 +15,7 @@ use std::ffi::CString;
 use std::mem::{size_of, size_of_val, transmute};
 use std::ptr;
 use std::slice;
-use render::{Texture, Frame, Texcoords, SpriteType1, ImageAsset};
+use render::{SpriteType1};
 
 macro_rules! check_error(
     () => (
@@ -75,15 +75,15 @@ pub struct GLData {
     pub back_foot_texcoords: [Texcoords; 9],
     */
 
-    pub image_assets: assets::Images
+    pub images: assets::Images
 }
 
 #[test]
 fn how_big_is_image_asset_data() {
     let size_of_image_asset = (size_of::<Texture>() + size_of::<Texcoords>()*10 + size_of::<GLuint>()) as f64;
-    let number_of_image_assets = 500.0;
-    let total_in_kilobytes = size_of_image_asset * number_of_image_assets / 1000.0;
-    panic!("{} image asseta = {} kb", number_of_image_assets, total_in_kilobytes);
+    let number_of_images = 500.0;
+    let total_in_kilobytes = size_of_image_asset * number_of_images / 1000.0;
+    panic!("{} image asseta = {} kb", number_of_images, total_in_kilobytes);
 }
 
 pub struct GameData {
@@ -117,7 +117,7 @@ pub unsafe extern "C" fn load(
         game.cam_pos.y = 0.0;
 
         // ============== OpenGL ================
-        gl_data.image_assets.init();
+        gl_data.images.init();
 
         // === Crattlecrute textures ===
         // gl_data.front_foot_tex = render::load_texture("assets/crattlecrute/front-foot.png");
@@ -168,8 +168,8 @@ pub unsafe extern "C" fn load(
         // gl_data.back_foot_tex.generate_texcoords_buffer(&mut gl_data.back_foot_texcoords);
         // gl_data.body_tex.generate_texcoords_buffer(&mut gl_data.body_texcoords);
 
-        gl_data.image_assets.crattlecrute_body.load();
-        let mut body_vbo = &mut gl_data.image_assets.crattlecrute_body.vbo;
+        gl_data.images.crattlecrute_body.load();
+        let mut body_vbo = &mut gl_data.images.crattlecrute_body.vbo;
         gl::GenBuffers(1, body_vbo);
         gl::BindBuffer(gl::ARRAY_BUFFER, *body_vbo);
         gl::BufferData(
@@ -221,7 +221,7 @@ fn compile_shaders(gl_data: &mut GLData, game: &GameData, window: &glfw::Window)
         gl_data.frames_uniform = gl::GetUniformLocation(gl_data.shader_prog, frames_str.as_ptr());
 
         gl::Uniform2f(gl_data.cam_pos_uniform, game.cam_pos.x, game.cam_pos.y);
-        gl::Uniform1f(gl_data.scale_uniform, 2.0);
+        gl::Uniform1f(gl_data.scale_uniform, 1.0);
         match window.get_size() {
             (width, height) => gl::Uniform2f(gl_data.screen_size_uniform, width as f32, height as f32)
         }
@@ -268,9 +268,9 @@ pub extern "C" fn update(
      
     // === PROCESSING? ===
     unsafe {
-        gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.image_assets.crattlecrute_body.vbo);
-        let mut body_buffer = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
-        let mut body_sprites = slice::from_raw_parts_mut::<SpriteType1>(
+        gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.images.crattlecrute_body.vbo);
+        let body_buffer = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
+        let body_sprites = slice::from_raw_parts_mut::<SpriteType1>(
             transmute(body_buffer),
             1 // TODO <- number of players
         );
@@ -291,7 +291,7 @@ pub extern "C" fn update(
         gl::ClearColor(0.1, 0.1, 0.3, 1.0);
         gl::Clear(gl::COLOR_BUFFER_BIT);
 
-        let ref crattlecrute_body = gl_data.image_assets.crattlecrute_body;
+        let ref crattlecrute_body = gl_data.images.crattlecrute_body;
         crattlecrute_body.texture.set(
             gl_data.tex_uniform,
             gl_data.sprite_size_uniform,

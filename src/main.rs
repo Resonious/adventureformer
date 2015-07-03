@@ -1,4 +1,4 @@
-#![feature(std_misc, negate_unsigned, fs_time)]
+#![feature(std_misc, negate_unsigned)]
 
 extern crate gl;
 extern crate glfw;
@@ -6,8 +6,7 @@ extern crate libc;
 
 use std::path::Path;
 use std::fs;
-use std::fs::File;
-use glfw::{Action, Context, Key};
+use glfw::{Context};
 use libc::{c_char, c_void, c_int};
 use std::dynamic_lib::DynamicLibrary;
 use std::thread;
@@ -100,9 +99,7 @@ extern "C" {
 
     pub fn GetLastError() -> c_int;
 }
-const INFINITE: i32 = 0xFFFFFFFF;
 const FILE_NOTIFY_CHANGE_LAST_WRITE: i32 = 0x00000010;
-const FILE_NOTIFY_CHANGE_CREATION: i32 = 0x00000040;
 const INVALID_HANDLE_VALUE: *const c_void = -1 as *const c_void;
 
 const FILE_LIST_DIRECTORY: i32 = 1;
@@ -111,10 +108,6 @@ const FILE_SHARE_DELETE: i32 = 0x00000004;
 const FILE_SHARE_READ:   i32 = 0x00000001;
 const FILE_SHARE_WRITE:  i32 = 0x00000002;
 
-const FILE_ACTION_ADDED:    i32 = 0x00000001;
-const FILE_ACTION_MODIFIED: i32 = 0x00000003;
-
-const FILE_ATTRIBUTE_NORMAL: i32 = 128;
 const FILE_FLAG_BACKUP_SEMANTICS: i32 = 0x02000000;
 
 const OPEN_EXISTING: i32 = 3;
@@ -189,8 +182,8 @@ unsafe fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
         }
     }
 
-    let mut results_buffer = [0u8; 1024];
-    let mut results_size: i32 = 0;
+    let results_buffer = [0u8; 1024];
+    let results_size: i32 = 0;
 
     loop {
         match ReadDirectoryChangesW(
@@ -215,7 +208,7 @@ unsafe fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
                 // NOTE Windows seems to just give back garbage string sizes, so
                 // this file name is 'af.dll' fused with 'af.metadata.o'
                 if file_name == "af.dlladata." {
-                    sender.send(());
+                    sender.send(()).unwrap();
                 }
             }
         }
@@ -228,7 +221,7 @@ fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
 }
 
 fn main() {
-    let mut glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
+    let glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
 
     let (mut window, events) = glfw
         .create_window(300, 300, "Hello this is window", glfw::WindowMode::Windowed)
@@ -243,13 +236,14 @@ fn main() {
     let mut game_memory = unsafe { Box::new([uninitialized::<u8>(); 4096]) };
     let mut gl_memory   = unsafe { Box::new([uninitialized::<u8>(); 1024]) };
 
+
     copy_game_lib_to_cwd();
     let mut game_lib = load_game_lib();
     let (mut load, mut update) = load_symbols_from(&game_lib);
 
     let (game_lib_sender, game_lib_receiver) = channel();
     unsafe {
-        thread::Builder::new().name("Game Lib Updater".to_string()).spawn(
+        let _t = thread::Builder::new().name("Game Lib Updater".to_string()).spawn(
             move || watch_for_updated_game_lib(&game_lib_sender)
         );
         load(

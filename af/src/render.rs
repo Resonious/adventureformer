@@ -4,8 +4,8 @@ extern crate libc;
 use vecmath::Vec2;
 use gl::types::*;
 use std::ffi::CString;
-use libc::{c_char, c_int, c_void};
-use std::mem::{uninitialized, transmute, size_of, size_of_val};
+use libc::{c_char, c_int};
+use std::mem::{uninitialized, transmute, size_of};
 use std::ptr;
 use std::slice;
 use std::vec::Vec;
@@ -319,7 +319,7 @@ impl Texture {
         {
             let mut current_pos = Vec2::<f32>::new(0.0, tex_height - height);
 
-            for i in (0..count) {
+            for _ in (0..count) {
                 if current_pos.x + width > tex_width {
                     current_pos.x = 0.0;
                     current_pos.y -= height;
