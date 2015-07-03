@@ -4,6 +4,7 @@ extern crate libc;
 
 pub mod vecmath;
 pub mod render;
+pub mod assets;
 
 use gl::types::*;
 use std::sync::mpsc::Receiver;
@@ -13,7 +14,24 @@ use vecmath::Vec2;
 use std::ffi::CString;
 use std::mem::{size_of, size_of_val, transmute};
 use std::ptr;
-use render::{Texture, Frame, Texcoords, SpriteData};
+use std::slice;
+use render::{Texture, Frame, Texcoords, SpriteType1, ImageAsset};
+
+macro_rules! check_error(
+    () => (
+        match gl::GetError() {
+            gl::NO_ERROR => {}
+            gl::INVALID_ENUM => panic!("Invalid enum!"),
+            gl::INVALID_VALUE => panic!("Invalid value!"),
+            gl::INVALID_OPERATION => panic!("Invalid operation!"),
+            gl::INVALID_FRAMEBUFFER_OPERATION => panic!("Invalid framebuffer operation?!"),
+            gl::OUT_OF_MEMORY => panic!("Out of memory bro!!!!!!!"),
+            // gl::STACK_UNDERFLOW => panic!("Stack UNDERflow!"),
+            // gl::STACK_OVERFLOW => panic!("Stack overflow!")
+            _ => panic!("I DON'T KNOW. FULL BANANNACAKES.")
+        }
+    )
+);
 
 static SQUARE_VERTICES: [GLfloat; 8] = [
 //    position
@@ -47,22 +65,33 @@ pub struct GLData {
     pub frames_uniform:      GLint,
 
     // === Hardcoded textures/texcoords ===
+    /*
     pub front_foot_tex:       Texture,
     pub front_foot_texcoords: [Texcoords; 9],
     pub body_tex:       Texture,
     pub body_texcoords: [Texcoords; 9],
+    pub body_vbo:       GLuint,
     pub back_foot_tex:       Texture,
     pub back_foot_texcoords: [Texcoords; 9],
+    */
+
+    pub image_assets: assets::Images
+}
+
+#[test]
+fn how_big_is_image_asset_data() {
+    let size_of_image_asset = (size_of::<Texture>() + size_of::<Texcoords>()*10 + size_of::<GLuint>()) as f64;
+    let number_of_image_assets = 500.0;
+    let total_in_kilobytes = size_of_image_asset * number_of_image_assets / 1000.0;
+    panic!("{} image asseta = {} kb", number_of_image_assets, total_in_kilobytes);
 }
 
 pub struct GameData {
-    cam_pos: Vec2<f32>,
+    pub cam_pos: Vec2<f32>,
 
-    front_foot_frames: [Frame; 9],
-    body_frames:       [Frame; 9],
-    back_foot_frames:  [Frame; 9]
-
-        // TODO place a SpriteData somewhere and see how it goes
+    // pub front_foot_frames: [Frame; 9],
+    // pub body_frames:       [Frame; 9],
+    // pub back_foot_frames:  [Frame; 9],
 }
 
 extern "C" {
@@ -83,18 +112,22 @@ pub unsafe extern "C" fn load(
     glfwSet(glfw_data);
     gl::load_with(|s| window.get_proc_address(s));
     if first_load {
+        // ============== Game ================
         game.cam_pos.x = 0.0;
         game.cam_pos.y = 0.0;
 
+        // ============== OpenGL ================
+        gl_data.image_assets.init();
+
         // === Crattlecrute textures ===
-        gl_data.front_foot_tex = render::load_texture("assets/crattlecrute/front-foot.png");
-        gl_data.front_foot_tex.add_frames(&mut game.front_foot_frames, 90, 90);
+        // gl_data.front_foot_tex = render::load_texture("assets/crattlecrute/front-foot.png");
+        // gl_data.front_foot_tex.add_frames(&mut game.front_foot_frames, 90, 90);
 
-        gl_data.body_tex = render::load_texture("assets/crattlecrute/body.png");
-        gl_data.body_tex.add_frames(&mut game.body_frames, 90, 90);
+        // gl_data.body_tex = render::load_texture("assets/crattlecrute/body.png");
+        // gl_data.body_tex.add_frames(&mut game.body_frames, 90, 90);
 
-        gl_data.back_foot_tex = render::load_texture("assets/crattlecrute/back-foot.png");
-        gl_data.back_foot_tex.add_frames(&mut game.back_foot_frames, 90, 90);
+        // gl_data.back_foot_tex = render::load_texture("assets/crattlecrute/back-foot.png");
+        // gl_data.back_foot_tex.add_frames(&mut game.back_foot_frames, 90, 90);
 
         // === Blending for alpha ===
         gl::Enable(gl::BLEND);
@@ -127,16 +160,30 @@ pub unsafe extern "C" fn load(
             gl::STATIC_DRAW
         );
 
+        // === Shaders and texcoords ===
         if !compile_shaders(gl_data, game, window) {
             panic!("Cannot continue due to shader error.");
         }
-        gl_data.front_foot_tex.generate_texcoords_buffer(&mut gl_data.front_foot_texcoords);
-        gl_data.body_tex.generate_texcoords_buffer(&mut gl_data.body_texcoords);
-        gl_data.back_foot_tex.generate_texcoords_buffer(&mut gl_data.back_foot_texcoords);
+        // gl_data.front_foot_tex.generate_texcoords_buffer(&mut gl_data.front_foot_texcoords);
+        // gl_data.back_foot_tex.generate_texcoords_buffer(&mut gl_data.back_foot_texcoords);
+        // gl_data.body_tex.generate_texcoords_buffer(&mut gl_data.body_texcoords);
+
+        gl_data.image_assets.crattlecrute_body.load();
+        let mut body_vbo = &mut gl_data.image_assets.crattlecrute_body.vbo;
+        gl::GenBuffers(1, body_vbo);
+        gl::BindBuffer(gl::ARRAY_BUFFER, *body_vbo);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            // TODO Just one player for now
+            1 * size_of::<SpriteType1>() as GLsizeiptr,
+            ptr::null(),
+            gl::DYNAMIC_DRAW
+        );
+        // Also only body for now (fuckin' get those all into one goddamn image)
     }
     else {
         if !compile_shaders(gl_data, game, window) {
-            println!("Shaders not reloaded.");
+            println!("Due to errors, shaders were not reloaded.");
         }
     }
 }
@@ -198,6 +245,8 @@ pub extern "C" fn update(
 ) {
     glfw.poll_events();
 
+    // === INPUT ===
+    let mut flip_player = false;
     for (_, event) in glfw::flush_messages(&events) {
         match event {
             glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
@@ -205,10 +254,60 @@ pub extern "C" fn update(
             }
             glfw::WindowEvent::Key(key, _, Action::Press, _) => {
                 println!("YOU PRESSED {:?}", key);
+                if key == Key::Space { flip_player = true }
             }
+
+            glfw::WindowEvent::Size(width, height) => unsafe {
+                gl::Viewport(0, 0, width, height);
+                gl::Uniform2f(gl_data.screen_size_uniform, width as f32, height as f32);
+            },
+
             _ => {}
         }
     }
+     
+    // === PROCESSING? ===
+    unsafe {
+        gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.image_assets.crattlecrute_body.vbo);
+        let mut body_buffer = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
+        let mut body_sprites = slice::from_raw_parts_mut::<SpriteType1>(
+            transmute(body_buffer),
+            1 // TODO <- number of players
+        );
+        // This should be a loop through sorted draw calls on for this texture.
+        body_sprites[0] = SpriteType1 {
+            position: Vec2::new(10.0, 10.0),
+            frame: 0,
+            flipped: flip_player as GLint
+        };
+        gl::UnmapBuffer(gl::ARRAY_BUFFER);
+        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+    }
+
+    // === RENDER ===
+    unsafe {
+        gl::Uniform2f(gl_data.cam_pos_uniform, game.cam_pos.x, game.cam_pos.y);
+
+        gl::ClearColor(0.1, 0.1, 0.3, 1.0);
+        gl::Clear(gl::COLOR_BUFFER_BIT);
+
+        let ref crattlecrute_body = gl_data.image_assets.crattlecrute_body;
+        crattlecrute_body.texture.set(
+            gl_data.tex_uniform,
+            gl_data.sprite_size_uniform,
+            gl_data.frames_uniform,
+            90.0, 90.0
+        );
+        SpriteType1::set(crattlecrute_body.vbo);
+        gl::DrawElementsInstanced(
+            // TODO last argument here will be number of render calls counted for player!
+            gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null(), 1
+        );
+
+        check_error!();
+    }
+
+    window.swap_buffers();
 }
 
 #[test]

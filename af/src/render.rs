@@ -4,9 +4,11 @@ extern crate libc;
 use vecmath::Vec2;
 use gl::types::*;
 use std::ffi::CString;
-use libc::{c_char, c_int};
-use std::mem::{uninitialized, transmute, size_of};
+use libc::{c_char, c_int, c_void};
+use std::mem::{uninitialized, transmute, size_of, size_of_val};
 use std::ptr;
+use std::slice;
+use std::vec::Vec;
 
 extern "C" {
     fn stbi_load(
@@ -125,20 +127,20 @@ macro_rules! make_shader(
     )
 );
 
+// TODO in the future, we can do SpriteType2 that adds rotation/scaling etc.
 #[derive(Clone)]
-pub struct SpriteData {
+pub struct SpriteType1 {
     pub position: Vec2<GLfloat>,
     pub frame: GLint,
     pub flipped: GLint
 }
+impl Copy for SpriteType1 { }
 
-impl Copy for SpriteData { }
-
-impl SpriteData {
-    fn set(&self, vbo: GLuint) {
+impl SpriteType1 {
+    pub fn set(vbo: GLuint) {
         unsafe {
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            let size_of_sprite = size_of::<SpriteData>() as GLint;
+            let size_of_sprite = size_of::<SpriteType1>() as GLint;
             assert_eq!(size_of_sprite, 16);
 
             // == Position ==
@@ -192,7 +194,7 @@ pub struct Frame {
     pub position: Vec2<f32>,
     pub size: Vec2<f32>,
 
-    // Texcoords are generated via generate_texcoords.
+    // Texcoords are generated via #generate_texcoords.
     pub texcoords: Texcoords
 }
 
@@ -233,7 +235,6 @@ pub struct Texture {
     pub width: i32,
     pub height: i32,
     pub filename: &'static str,
-    pub frame_space: *mut [Frame],
     pub frame_texcoords_size: i64,
     pub texcoords_space: *mut [Texcoords]
 }
@@ -249,16 +250,6 @@ impl Texture {
     }
 
     #[inline]
-    pub fn frames_mut(&mut self) -> &mut [Frame] {
-        unsafe { transmute(self.frame_space) }
-    }
-
-    #[inline]
-    pub fn frames(&self) -> &[Frame] {
-        unsafe { transmute(self.frame_space) }
-    }
-
-    #[inline]
     pub fn texcoords(&self) -> &[Texcoords] {
         unsafe { transmute(self.texcoords_space) }
     }
@@ -268,20 +259,8 @@ impl Texture {
         unsafe { transmute(self.texcoords_space) }
     }
 
-    #[inline]
-    pub fn frame_at_mut(&mut self, i: usize) -> &mut Frame {
-        let mut frames = self.frames_mut();
-        unsafe { transmute(&mut frames[i]) }
-    }
-
-    #[inline]
-    pub fn frame_at(&self, i: usize) -> &Frame {
-        let frames = self.frames();
-        &frames[i]
-    }
-
-    // NOTE this expects generate_texcoords_buffer to have been called
-    // if there are frames.
+    // NOTE this expects #generate_texcoords_buffer to have been called
+    // if there are frames. "
     pub fn set(&self, sampler_uniform:     GLint,
                       sprite_size_uniform: GLint,
                       frames_uniform:      GLint,
@@ -294,7 +273,7 @@ impl Texture {
             gl::Uniform1i(sampler_uniform, 0);
             gl::Uniform2f(sprite_size_uniform, width as f32, height as f32);
 
-            let frames_len = self.frames().len();
+            let frames_len = self.texcoords().len();
 
             if frames_len > 0 {
                 gl::Uniform2fv(
@@ -310,33 +289,34 @@ impl Texture {
         self.texcoords_mut()[index] = texcoord;
     }
 
-    pub fn generate_texcoords_buffer(&mut self, space: *mut [Texcoords]) {
+    // NOTE this should be properly merged with add_frames.
+    pub fn generate_texcoords_buffer(
+        &mut self, frame_width: usize, frame_height: usize, space: *mut [Texcoords]
+    ) {
         unsafe {
-            let frames_len = self.frames().len();
-            assert_eq!(frames_len, (*space).len());
-            if frames_len == 0 { return; }
+            let frames_len = (*space).len();
+
+            let mut frames = Vec::<Frame>::with_capacity(frames_len);
+            self.add_frames(&mut frames, frame_width, frame_height);
+            assert_eq!(frames.len(), frames_len); // PLZ
 
             self.texcoords_space = space;
             for i in (0..frames_len) {
-                // Defying borrow checker here
-                let texcoords: &Texcoords = transmute(&self.frame_at(i).texcoords);
-                texcoords.copy_to(&mut self.texcoords_mut()[i])
+                frames[i].texcoords.copy_to(&mut self.texcoords_mut()[i]);
             }
         }
     }
 
     // Fill the given slice with frames of the given width and height. "
-    pub fn add_frames(&mut self, space: *mut [Frame], uwidth: usize, uheight: usize) {
-        let count = unsafe { (*space).len() };
+    // So this is now called only by #generate_texcoords_buffer
+    pub fn add_frames(&mut self, space: &mut Vec<Frame>, uwidth: usize, uheight: usize) {
+        let count = space.capacity();
         let tex_width  = self.width as f32;
         let tex_height = self.height as f32;
         let width  = uwidth as f32;
         let height = uheight as f32;
 
-        self.frame_space = space;
         {
-            let mut frames = self.frames_mut();
-
             let mut current_pos = Vec2::<f32>::new(0.0, tex_height - height);
 
             for i in (0..count) {
@@ -357,13 +337,13 @@ impl Texture {
                     texcoords: unsafe { uninitialized() }
                 };
                 frame.generate_texcoords(tex_width, tex_height);
-                frames[i] = frame;
+                space.push(frame);
 
                 current_pos.x += width;
             }
         }
 
-        self.frame_texcoords_size += size_of::<Texcoords>() as i64 * count as i64;
+        self.frame_texcoords_size = size_of::<Texcoords>() as i64 * count as i64;
     }
 
     // TODO man, should this be a destructor?
@@ -372,6 +352,44 @@ impl Texture {
         unsafe {
             gl::DeleteTextures(1, &self.id);
         }
+    }
+}
+
+// NOTE don't instantiate these willy nilly!
+pub struct ImageAsset {
+    pub filename:       &'static str,
+    pub vbo:            GLuint,
+    pub texture:        Texture,
+    pub frame_width:    usize,
+    pub frame_height:   usize,
+    pub texcoord_count: usize,
+    // The next texcoord_count * size_of::<Texcoords>() bytes
+    // should be free for this struct to use.
+}
+
+impl ImageAsset {
+    pub unsafe fn texcoords(&mut self) -> &mut [Texcoords] {
+        let count_ptr: *mut usize = &mut self.texcoord_count;
+        slice::from_raw_parts_mut::<Texcoords>(
+            transmute(count_ptr.offset(1)),
+            self.texcoord_count
+        )
+    }
+
+    pub fn loaded(&self) -> bool { self.vbo != 0 }
+
+    pub unsafe fn load(&mut self) {
+        let mut texture = load_texture(self.filename);
+        texture.generate_texcoords_buffer(self.frame_width, self.frame_height, self.texcoords());
+        self.texture = texture;
+
+        gl::GenBuffers(1, &mut self.vbo);
+        gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
+        // NOTE that this doesn't do gl::BufferData for now.
+    }
+
+    pub unsafe fn unload(&mut self) {
+        panic!("Unloading doesn't work yet hahahaha!");
     }
 }
 
@@ -390,10 +408,9 @@ pub fn load_texture(filename: &'static str) -> Texture {
         gl::GenTextures(1, &mut tex_id);
         gl::BindTexture(gl::TEXTURE_2D, tex_id);
 
-        // TODO Maybe change these around I dunno.....
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as GLint);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as GLint);
-        // Set texture filtering
+
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as GLint);
 
@@ -412,7 +429,6 @@ pub fn load_texture(filename: &'static str) -> Texture {
         width: width,
         height: height,
         filename: filename,
-        frame_space: &mut [],
         frame_texcoords_size: 0,
         texcoords_space: &mut []
     }
