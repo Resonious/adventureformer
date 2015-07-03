@@ -211,7 +211,8 @@ macro_rules! gen_shader {
         impl Copy for $sprite_type { }
 
         impl $sprite_type {
-            pub unsafe fn set(vbo: GLuint) {
+            #[allow(unused_assignments)]
+            pub fn set(vbo: GLuint) { unsafe {
                 gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
 
                 let size_of_sprite = size_of::<$sprite_type>() as GLint;
@@ -228,7 +229,7 @@ macro_rules! gen_shader {
                 )*
 
                 gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-            }
+            }}
 
             pub fn vertex_shader() -> String {
                 let mut vertex = String::with_capacity(4092);
@@ -538,6 +539,7 @@ impl Texture {
 pub struct ImageAsset {
     pub filename:       &'static str,
     pub vbo:            GLuint,
+    pub set_attributes: extern "Rust" fn(GLuint),
     pub texture:        Texture,
     pub frame_width:    usize,
     pub frame_height:   usize,
@@ -573,6 +575,23 @@ impl ImageAsset {
             ptr::null(),
             draw
         );
+    }
+
+    // Sets the texture, and the attributes
+    pub fn set(
+        &mut self,
+        tex_uniform: GLint,
+        sprite_size_uniform: GLint,
+        frames_uniform: GLint
+    ) {
+        self.texture.set(
+            tex_uniform,
+            sprite_size_uniform,
+            frames_uniform,
+            self.frame_width as f32, self.frame_height as f32
+        );
+        let set_attributes = self.set_attributes;
+        set_attributes(self.vbo);
     }
 
     pub unsafe fn unload(&mut self) {

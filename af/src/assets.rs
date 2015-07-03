@@ -1,8 +1,8 @@
 use std::mem::zeroed;
-use render::{ImageAsset, Texcoords};
+use render::{ImageAsset, Texcoords, SpriteType1};
 
 macro_rules! image_assets {
-    ($($texcoords_name:ident $name:ident: $sprite_type:ty [$texcoords:expr][$w:expr;$h:expr] $path:expr),+) =>  {
+    ($($texcoords_name:ident $name:ident: $sprite_type:ident [$texcoords:expr][$w:expr;$h:expr] $path:expr),+) =>  {
 
     pub struct Images {
         $(
@@ -18,6 +18,7 @@ macro_rules! image_assets {
             self.$name = ImageAsset {
                 filename: $path,
                 vbo: 0,
+                set_attributes: $sprite_type::set,
                 texture: unsafe { zeroed() },
                 frame_width: $w,
                 frame_height: $h,

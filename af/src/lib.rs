@@ -273,13 +273,11 @@ pub extern "C" fn update(
 
         macro_rules! renderplr {
             ($img:expr) => {
-                $img.texture.set(
+                $img.set(
                     gl_data.tex_uniform,
                     gl_data.sprite_size_uniform,
                     gl_data.frames_uniform,
-                    90.0, 90.0
                 );
-                SpriteType1::set($img.vbo);
                 gl::DrawElementsInstanced(
                 // TODO last argument here will be number of render calls counted for player!
                     gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null(), 1
