@@ -37,18 +37,18 @@ extern "C" {
     fn stbi_image_free(ptr: *const u8);
 }
 
+// Global GL game state
 pub struct GLData {
-    // === Global buffers ===
     pub vao: GLuint,
     pub square_vbo: GLuint,
     pub square_ebo: GLuint,
 
     pub images: assets::Images,
-    pub shaders: assets::Shaders,
+    pub shaders: assets::Shaders
 }
 
 
-// NOTE make sure these constants match what's in the shader.
+// TODO all this stuff is no longer used and is managed by assets instead.
 pub static ATTR_VERTEX_POS: u32 = 0;
 pub static ATTR_POSITION: u32 = 1;
 pub static ATTR_FRAME: u32 = 2;
@@ -146,7 +146,6 @@ macro_rules! make_shader(
     (($name:expr): $shader_type:ident) => (
         unsafe {
             let sh = gl::CreateShader(gl::$shader_type);
-            // TODO right here is where we'd call shader string function?
             let shader_src_str = CString::new($name).unwrap();
             gl::ShaderSource(sh, 1, &shader_src_str.as_ptr(), ptr::null());
             gl::CompileShader(sh);
@@ -154,34 +153,6 @@ macro_rules! make_shader(
         }
     )
 );
-
-
-/*
-#[test]
-fn gen_shader_works() {
-    gen_shader!(
-    [vertex]
-        layout (location = 1) in vec2 mytype;
-        layout (location = 2) in float yessss;
-        ("
-        void main()
-        {
-            // omg
-            gl_Position = vec4(mytype, yesss, 0.0f);
-        }
-        ")
-    [fragment]
-        ("
-        void main()
-        {
-            //omg!!
-            color = wtf;
-        }
-        ")
-    );
-    panic!(":)");
-}
-*/
 
 pub struct Texcoords {
     pub top_right:    Vec2<GLfloat>,
@@ -366,7 +337,9 @@ impl Texture {
 
 // NOTE don't instantiate these willy nilly!
 pub struct ImageAsset {
-    // TODO is it bad to keep this pointer? I would reckon no.
+    // I don't like wasting space with the pointer here, but
+    // it's hard to pass gl_data to a method called on this
+    // because of the borrow checker...
     pub gl_data:         *const GLData,
     pub filename:        &'static str,
     pub vbo:             GLuint,
