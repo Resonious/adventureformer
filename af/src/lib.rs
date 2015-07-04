@@ -15,7 +15,7 @@ use std::mem::{size_of, size_of_val, transmute};
 use std::ptr;
 use std::slice;
 use render::{GLData};
-use assets::SpriteType1;
+use assets::SpriteType1Color2;
 
 macro_rules! check_error(
     () => (
@@ -126,11 +126,11 @@ pub unsafe extern "C" fn load(
         gl_data.images.crattlecrute_back_foot.load();
         // TODO Just one player for now
         gl_data.images.crattlecrute_front_foot
-            .empty_buffer_data::<SpriteType1>(1, gl::DYNAMIC_DRAW);
+            .empty_buffer_data::<SpriteType1Color2>(1, gl::DYNAMIC_DRAW);
         gl_data.images.crattlecrute_body
-            .empty_buffer_data::<SpriteType1>(1, gl::DYNAMIC_DRAW);
+            .empty_buffer_data::<SpriteType1Color2>(1, gl::DYNAMIC_DRAW);
         gl_data.images.crattlecrute_back_foot
-            .empty_buffer_data::<SpriteType1>(1, gl::DYNAMIC_DRAW);
+            .empty_buffer_data::<SpriteType1Color2>(1, gl::DYNAMIC_DRAW);
     }
     else {
         let failed = assets::Shaders::compile(gl_data, window);
@@ -194,21 +194,20 @@ pub extern "C" fn update(
             ($($img:ident),+) => {
                 $({
                 gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.images.$img.vbo);
-        check_error!();
                 let buffer = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
-        check_error!();
-                let sprites = slice::from_raw_parts_mut::<SpriteType1>(
+                let sprites = slice::from_raw_parts_mut::<SpriteType1Color2>(
                     transmute(buffer),
                     1 // TODO <- number of players
                 );
                 // This should be a loop through sorted draw calls on for this texture.
-                sprites[0] = SpriteType1 {
+                sprites[0] = SpriteType1Color2 {
                     position: game.player_pos,
                     frame:    game.player_frame,
-                    flipped:  flip_player as GLint
+                    flipped:  flip_player as GLint,
+                    color_swap_1: Vec2::new(0x0094FFFF, 0x2B06D3FF),
+                    color_swap_2: Vec2::new(0x00C7FFFF, 0x3071D3FF)
                 };
                 gl::UnmapBuffer(gl::ARRAY_BUFFER);
-        check_error!();
                 });*
             }
         };

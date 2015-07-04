@@ -12,9 +12,9 @@ use vecmath::*;
 mod macros;
 
 image_assets!(
-    ccbdy crattlecrute_body:       SpriteType1 [9][90;90] "assets/crattlecrute/body.png",
-    ccbft crattlecrute_back_foot:  SpriteType1 [9][90;90] "assets/crattlecrute/back-foot.png",
-    ccfft crattlecrute_front_foot: SpriteType1 [9][90;90] "assets/crattlecrute/front-foot.png"
+    ccbdy crattlecrute_body:       SpriteType1Color2 [9][90;90] "assets/crattlecrute/body.png",
+    ccbft crattlecrute_back_foot:  SpriteType1Color2 [9][90;90] "assets/crattlecrute/back-foot.png",
+    ccfft crattlecrute_front_foot: SpriteType1Color2 [9][90;90] "assets/crattlecrute/front-foot.png"
 );
 
 shader_assets!(
@@ -66,10 +66,10 @@ SpriteType1Color2:
      vec4 color_from(int color)
      {
          return vec4(
-             float((color & 0xFF000000) >> 24) / 256,
-             float((color & 0x00FF0000) >> 16) / 256,
-             float((color & 0x0000FF00) >>  8) / 256,
-             float(color & 0x000000FF)         / 256
+             float((color & 0xFF000000) >> 24) / 255,
+             float((color & 0x00FF0000) >> 16) / 255,
+             float((color & 0x0000FF00) >>  8) / 255,
+             float(color & 0x000000FF)         / 255
          );
      }
 
@@ -101,14 +101,25 @@ SpriteType1Color2:
      in vec4 cswap2_from;
      in vec4 cswap2_to;
 
+     bool approx(vec4 a, vec4 b, float alpha)
+     {
+         return abs(a.x - b.x) <= alpha &&
+                abs(a.y - b.y) <= alpha &&
+                abs(a.z - b.z) <= alpha &&
+                abs(a.w - b.w) <= alpha;
+     }
+
      void main()
      {
         color = texture(tex, texcoord);
 
-        if (color == cswap1_from)
+        if (approx(color, cswap1_from, 0.1))
             color = cswap1_to;
-        else if (color == cswap2_from)
+        else if (approx(color, cswap2_from, 0.1))
             color = cswap2_to;
+
+        // LE DEBUGGING
+        // color = vec4(cswap1_from.rgb, color.a);
      }
      ")
 );
