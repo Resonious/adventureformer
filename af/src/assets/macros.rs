@@ -19,6 +19,7 @@ macro_rules! image_assets {
                 vbo: 0,
                 set_attributes: $sprite_type::set,
                 shader: $sprite_type::shader,
+                attributes_size: size_of::<$sprite_type>(),
                 texture: unsafe { zeroed() },
                 frame_width: $w,
                 frame_height: $h,

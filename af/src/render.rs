@@ -367,15 +367,16 @@ impl Texture {
 // NOTE don't instantiate these willy nilly!
 pub struct ImageAsset {
     // TODO is it bad to keep this pointer? I would reckon no.
-    pub gl_data:        *const GLData,
-    pub filename:       &'static str,
-    pub vbo:            GLuint,
-    pub set_attributes: extern "Rust" fn(GLuint),
-    pub shader:         extern "Rust" fn(&GLData) -> &assets::Shader,
-    pub texture:        Texture,
-    pub frame_width:    usize,
-    pub frame_height:   usize,
-    pub texcoord_count: usize,
+    pub gl_data:         *const GLData,
+    pub filename:        &'static str,
+    pub vbo:             GLuint,
+    pub set_attributes:  extern "Rust" fn(GLuint),
+    pub shader:          extern "Rust" fn(&GLData) -> &assets::Shader,
+    pub attributes_size: usize,
+    pub texture:         Texture,
+    pub frame_width:     usize,
+    pub frame_height:    usize,
+    pub texcoord_count:  usize,
     // The next texcoord_count * size_of::<Texcoords>() bytes
     // should be free for this struct to use.
 }
@@ -399,11 +400,11 @@ impl ImageAsset {
         gl::GenBuffers(1, &mut self.vbo);
     }
 
-    pub unsafe fn empty_buffer_data<SpriteType>(&mut self, count: i64, draw: GLenum) {
+    pub unsafe fn empty_buffer_data(&mut self, count: i64, draw: GLenum) {
         gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
         gl::BufferData(
             gl::ARRAY_BUFFER,
-            count * size_of::<SpriteType>() as GLsizeiptr,
+            count * self.attributes_size as GLsizeiptr,
             ptr::null(),
             draw
         );

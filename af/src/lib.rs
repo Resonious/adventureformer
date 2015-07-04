@@ -125,12 +125,9 @@ pub unsafe extern "C" fn load(
         gl_data.images.crattlecrute_body.load();
         gl_data.images.crattlecrute_back_foot.load();
         // TODO Just one player for now
-        gl_data.images.crattlecrute_front_foot
-            .empty_buffer_data::<SpriteType1Color2>(1, gl::DYNAMIC_DRAW);
-        gl_data.images.crattlecrute_body
-            .empty_buffer_data::<SpriteType1Color2>(1, gl::DYNAMIC_DRAW);
-        gl_data.images.crattlecrute_back_foot
-            .empty_buffer_data::<SpriteType1Color2>(1, gl::DYNAMIC_DRAW);
+        gl_data.images.crattlecrute_front_foot.empty_buffer_data(1, gl::DYNAMIC_DRAW);
+        gl_data.images.crattlecrute_body.empty_buffer_data(1, gl::DYNAMIC_DRAW);
+        gl_data.images.crattlecrute_back_foot.empty_buffer_data(1, gl::DYNAMIC_DRAW);
     }
     else {
         let failed = assets::Shaders::compile(gl_data, window);
