@@ -5,6 +5,7 @@ extern crate libc;
 pub mod vecmath;
 pub mod render;
 pub mod assets;
+pub mod controls;
 
 use gl::types::*;
 use std::sync::mpsc::Receiver;
@@ -16,6 +17,7 @@ use std::ptr;
 use std::slice;
 use render::{GLData};
 use assets::SpriteType1Color2;
+use controls::Controls;
 
 macro_rules! check_error(
     () => (
@@ -48,10 +50,17 @@ macro_rules! stride(
 );
 
 pub struct GameData {
+    pub fps: i32,
+    pub time_counter: f32,
+    pub frame_counter: i32,
+
     pub cam_pos: Vec2<f32>,
 
+    pub controls: Controls,
+
     pub player_pos: Vec2<f32>,
-    pub player_frame: GLint,
+    pub flip_player: bool,
+    pub player_frame: GLint
 }
 
 extern "C" {
@@ -144,54 +153,90 @@ pub unsafe extern "C" fn load(
 pub extern "C" fn update(
     game:    &mut GameData,
     gl_data: &mut GLData,
+    delta_t: f32,
     glfw:    &mut glfw::Glfw,
     window:  &mut glfw::Window,
     events:  &Receiver<(f64, glfw::WindowEvent)>
 ) {
+    // === Count Frames Per Second ===
+    game.time_counter += delta_t;
+    game.frame_counter += 1;
+
+    if game.time_counter >= 1.0 {
+        game.fps = game.frame_counter;
+        game.frame_counter = 0;
+        game.time_counter = 0.0;
+    }
+
     glfw.poll_events();
 
     // === INPUT ===
-    // this flip_player was just for testing
-    let mut flip_player = false;
-
     let mut new_window_size: Option<(GLfloat, GLfloat)> = None;
 
+    for control in game.controls.iter_mut() {
+        control.last_frame = control.this_frame;
+    }
     for (_, event) in glfw::flush_messages(&events) {
         match event {
+            // TODO maybe keep this around but this is actually stupid
             glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
                 window.set_should_close(true)
             }
-            glfw::WindowEvent::Key(key, _, Action::Press, _) => {
-                match key {
-                    Key::Space => {
-                        game.player_frame += 1;
-                        if game.player_frame > 8 { game.player_frame = 1; }
-                    }
-                    Key::Left =>  game.player_pos.x -= 8.0,
-                    Key::Right => game.player_pos.x += 8.0,
-                    other => {
-                        println!("YOU PRESSED {:?}", other);
-                    }
+
+            glfw::WindowEvent::Key(key, _, action, _) => {
+                let control = match key {
+                    Key::W  => &mut game.controls.up,
+                    Key::Up => &mut game.controls.up,
+
+                    Key::S    => &mut game.controls.down,
+                    Key::Down => &mut game.controls.down,
+
+                    Key::A    => &mut game.controls.left,
+                    Key::Left => &mut game.controls.left,
+
+                    Key::D     => &mut game.controls.right,
+                    Key::Right => &mut game.controls.right,
+
+                    Key::B => &mut game.controls.debug,
+
+                    _ => break
+                };
+
+                match action {
+                    Action::Press => control.this_frame = true,
+                    Action::Release => control.this_frame = false,
+                    _ => {}
                 }
             }
 
             glfw::WindowEvent::Size(width, height) => unsafe {
                 gl::Viewport(0, 0, width, height);
                 new_window_size = Some((width as GLfloat, height as GLfloat));
-                // gl::Uniform2f(gl_data.screen_size_uniform, width as f32, height as f32);
             },
 
             _ => {}
         }
     }
-     
+
     // === PROCESSING? ===
     unsafe {
+        if game.controls.left.down() {
+            game.player_pos.x -= 100.0 * delta_t;
+            game.flip_player = true;
+        }
+        if game.controls.right.down() {
+            game.player_pos.x += 100.0 * delta_t;
+            game.flip_player = false;
+        }
+        if game.controls.debug.just_down() {
+            println!("time_counter: {} | delta: {} | fps: {}", game.time_counter, delta_t, game.fps);
+        }
+
         macro_rules! plrdata {
             ($($img:ident),+) => {
                 $({
                 gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.images.$img.vbo);
-                let buffer = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
+                let buffer  = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
                 let sprites = slice::from_raw_parts_mut::<SpriteType1Color2>(
                     transmute(buffer),
                     1 // TODO <- number of players
@@ -200,7 +245,7 @@ pub extern "C" fn update(
                 sprites[0] = SpriteType1Color2 {
                     position: game.player_pos,
                     frame:    game.player_frame,
-                    flipped:  flip_player as GLint,
+                    flipped:  game.flip_player as GLint,
                     color_swap_1: Vec2::new(0x0094FFFF, 0x2B06D3FF),
                     color_swap_2: Vec2::new(0x00C7FFFF, 0x3071D3FF)
                 };

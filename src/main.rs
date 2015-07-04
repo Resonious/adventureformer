@@ -30,6 +30,7 @@ type LoadFn = extern "C" fn (
 type UpdateFn = extern "C" fn (
     &mut u8, // GameData
     &mut u8, // GLData
+    f32, // delta time
     &glfw::Glfw,
     &glfw::Window,
     &Receiver<(f64, glfw::WindowEvent)>
@@ -97,6 +98,9 @@ extern "C" {
         timeout_ms: c_int
     ) -> c_int;
 
+    pub fn QueryPerformanceCounter(out: *mut i64) -> bool;
+    pub fn QueryPerformanceFrequency(out: *mut i64) -> bool;
+
     pub fn GetLastError() -> c_int;
 }
 const FILE_NOTIFY_CHANGE_LAST_WRITE: i32 = 0x00000010;
@@ -158,6 +162,25 @@ fn load_symbols_from(lib: &DynamicLibrary) -> (LoadFn, UpdateFn) {
         };
 
         (load, update)
+    }
+}
+
+#[cfg(windows)]
+fn query_performance_frequency() -> i64 {
+    let mut freq = 0i64;
+    unsafe {
+        if !QueryPerformanceFrequency(&mut freq) {
+            panic!("Couldn't query performance frequency. Error code {}.", GetLastError());
+        }
+    }
+    freq
+}
+#[cfg(windows)]
+fn query_performance_counter(counter: &mut i64) {
+    unsafe {
+        if !QueryPerformanceCounter(counter) {
+            panic!("Couldn't query performance counter. Error code {}.", GetLastError());
+        }
     }
 }
 
@@ -255,8 +278,14 @@ fn main() {
         );
     }
 
+    let mut last_frame_time = 0i64;
+    let mut this_frame_time = 0i64;
+    let ticks_per_second = query_performance_frequency() as f32;
+
     while !window.should_close() {
         unsafe {
+            query_performance_counter(&mut this_frame_time);
+
             match game_lib_receiver.try_recv() {
                 Ok(()) => {
                     drop(game_lib);
@@ -275,11 +304,18 @@ fn main() {
                 _ => {}
             }
 
+            let delta_time =
+                if last_frame_time == 0 { 1.0/60.0 }
+                else { ((this_frame_time - last_frame_time) as f32) / ticks_per_second };
+
             update(
                 transmute(&mut game_memory[0]),
                 transmute(&mut gl_memory[0]),
+                delta_time,
                 &glfw, &window, &events
             );
+
+            last_frame_time = this_frame_time;
         }
     }
 }
