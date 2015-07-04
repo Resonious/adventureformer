@@ -9,6 +9,21 @@ use std::mem::{uninitialized, transmute, size_of};
 use std::ptr;
 use std::slice;
 use std::vec::Vec;
+use assets;
+
+macro_rules! check_error(
+    () => (
+        match gl::GetError() {
+            gl::NO_ERROR => {}
+            gl::INVALID_ENUM => panic!("Invalid enum!"),
+            gl::INVALID_VALUE => panic!("Invalid value!"),
+            gl::INVALID_OPERATION => panic!("Invalid operation!"),
+            gl::INVALID_FRAMEBUFFER_OPERATION => panic!("Invalid framebuffer operation?!"),
+            gl::OUT_OF_MEMORY => panic!("Out of memory bro!!!!!!!"),
+            _ => panic!("I DON'T KNOW. FULL BANANNACAKES.")
+        }
+    )
+);
 
 extern "C" {
     fn stbi_load(
@@ -21,6 +36,17 @@ extern "C" {
 
     fn stbi_image_free(ptr: *const u8);
 }
+
+pub struct GLData {
+    // === Global buffers ===
+    pub vao: GLuint,
+    pub square_vbo: GLuint,
+    pub square_ebo: GLuint,
+
+    pub images: assets::Images,
+    pub shaders: assets::Shaders,
+}
+
 
 // NOTE make sure these constants match what's in the shader.
 pub static ATTR_VERTEX_POS: u32 = 0;
@@ -100,9 +126,13 @@ macro_rules! check_log(
                 gl::$get_iv($val, gl::INFO_LOG_LENGTH, &mut len);
 
                 let mut buf = Vec::with_capacity(len as usize - 1);
+                for _ in (0..len-1) { buf.push(0); }
                 gl::$get_log($val, len, ptr::null_mut(), buf.as_mut_ptr() as *mut GLchar);
-                
-                $on_error!("{} ERROR: {:?}", $typ, String::from_utf8(buf));
+
+                match String::from_utf8(buf) {
+                    Ok(error_message) => $on_error!("{}", error_message),
+                    Err(e) => $on_error!("Error parsing OpenGL error message: {}", e)
+                }
                 false
             } else {
                 println!("I THINK THE {} COMPILED", $typ);
@@ -125,207 +155,6 @@ macro_rules! make_shader(
     )
 );
 
-// TODO in the future, we can do SpriteType2 that adds rotation/scaling etc.
-#[derive(Clone)]
-pub struct OldSpriteType1 {
-    pub position: Vec2<GLfloat>,
-    pub frame: GLint,
-    pub flipped: GLint
-}
-impl Copy for OldSpriteType1 { }
-
-impl OldSpriteType1 {
-    pub fn set(vbo: GLuint) {
-        unsafe {
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            let size_of_sprite = size_of::<OldSpriteType1>() as GLint;
-            assert_eq!(size_of_sprite, 16);
-
-            // == Position ==
-            gl::EnableVertexAttribArray(ATTR_POSITION);
-            gl::VertexAttribPointer(
-                ATTR_POSITION, 2, gl::FLOAT, gl::FALSE as GLboolean,
-                size_of_sprite, transmute(0 as isize)
-            );
-            gl::VertexAttribDivisor(ATTR_POSITION, 1);
-            let mut offset = 2 * size_of::<GLfloat>() as i64;
-            assert_eq!(offset, 8);
-
-            // == Frame ==
-            gl::EnableVertexAttribArray(ATTR_FRAME);
-            gl::VertexAttribIPointer(
-                ATTR_FRAME, 1, gl::INT,
-                size_of_sprite, transmute(offset)
-            );
-            gl::VertexAttribDivisor(ATTR_FRAME, 1);
-            offset += 1 * size_of::<GLint>() as i64;
-            assert_eq!(offset, 12);
-
-            // == Flipped ==
-            gl::EnableVertexAttribArray(ATTR_FLIPPED);
-            gl::VertexAttribIPointer(
-                ATTR_FLIPPED, 1, gl::INT,
-                size_of_sprite, transmute(offset)
-            );
-            gl::VertexAttribDivisor(ATTR_FLIPPED, 1);
-
-            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-        }
-    }
-}
-
-macro_rules! vertex_attrib_pointer {
-    (float, $loc:expr, $size:expr, $offset:expr) => {
-        gl::VertexAttribPointer(
-            $loc, 1, gl::FLOAT, gl::FALSE as GLboolean,
-            $size, transmute($offset)
-        );
-    };
-    (vec2, $loc:expr, $size:expr, $offset:expr) => {
-        gl::VertexAttribPointer(
-            $loc, 2, gl::FLOAT, gl::FALSE as GLboolean,
-            $size, transmute($offset)
-        );
-    };
-    ($int_type:ident, $loc:expr, $size:expr, $offset:expr) => {
-        gl::VertexAttribIPointer(
-            $loc, 1, gl::INT,
-            $size, transmute($offset)
-        );
-    };
-}
-
-macro_rules! gen_shader {
-    (
-        $sprite_type:ident
-        [vertex]
-            $(layout (location = $loc:expr) in $glsltype:ident($attrtype:ty) $name:ident;)*
-            ($vertmain:expr)
-        [fragment]
-            ($fragmain:expr)
-    ) => {
-        #[derive(Clone)]
-        pub struct $sprite_type {
-            $( pub $name: $attrtype ),*
-        }
-        impl Copy for $sprite_type { }
-
-        impl $sprite_type {
-            #[allow(unused_assignments)]
-            pub fn set(vbo: GLuint) { unsafe {
-                gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-
-                let size_of_sprite = size_of::<$sprite_type>() as GLint;
-                let mut offset: i64 = 0;
-
-                $(
-                    gl::EnableVertexAttribArray($loc);
-                    vertex_attrib_pointer!(
-                        $glsltype, $loc,
-                        size_of_sprite, offset
-                    );
-                    gl::VertexAttribDivisor($loc, 1);
-                    offset += size_of::<$attrtype>() as i64;
-                )*
-
-                gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-            }}
-
-            pub fn vertex_shader() -> String {
-                let mut vertex = String::with_capacity(4092);
-                vertex.push_str("
-                    #version 330 core
-
-                    // Per vertex, normalized:
-                    layout (location = 0) in vec2 vertex_pos;
-                    // Per instance:
-                ");
-                $({
-                    if $loc == 0 { panic!("Shader location 0 is reserved for vertex position") }
-                    vertex.push_str(&format!("layout (location = {}) in {} {};\n",
-                        $loc, stringify!($glsltype), stringify!($name)
-                    ));
-                });*
-
-                vertex.push_str("
-                    // NOTE up this if you run into problems
-                    uniform vec2[256] frames;
-                    uniform vec2 screen_size;
-                    uniform vec2 cam_pos;     // in pixels
-                    uniform vec2 sprite_size; // in pixels
-                    uniform float scale;
-
-                    out vec2 texcoord;
-
-                    const vec2 TEXCOORD_FROM_ID[4] = vec2[4](
-                        vec2(1.0, 1.0), vec2(1.0, 0.0),
-                        vec2(0.0, 0.0), vec2(0.0, 1.0)
-                    );
-
-                    vec2 from_pixel(vec2 pos)
-                    {
-                        return pos / screen_size;
-                    }
-
-                    int flipped_vertex_id()
-                    {
-                        return 3 - gl_VertexID;
-                    }
-                ");
-                vertex.push_str($vertmain);
-                println!("VERTEX:\n{}", vertex);
-                vertex
-            }
-
-            pub fn fragment_shader() -> String {
-                let mut fragment = String::with_capacity(1028);
-                fragment.push_str("
-                    #version 330 core
-                    in vec2 texcoord;
-                    out vec4 color;
-                    uniform sampler2D tex;
-                ");
-                fragment.push_str($fragmain);
-
-                println!("FRAGMENT:\n{}", fragment);
-                fragment
-            }
-        }
-    }
-}
-
-gen_shader!(
-    SpriteType1
-
-    [vertex]
-        layout (location = 1) in vec2(Vec2<GLfloat>) position; // in pixels
-        layout (location = 2) in int(GLint) frame;
-        layout (location = 3) in int(GLint) flipped;   // actually a bool
-    ("
-     void main()
-     {
-        vec2 pixel_screen_pos = (position - cam_pos) * 2;
-        gl_Position = vec4(
-            (vertex_pos * from_pixel(sprite_size) + from_pixel(pixel_screen_pos)) * scale,
-            0.0f, 1.0f
-        );
-        int index = flipped != 0 ? flipped_vertex_id() : gl_VertexID;
-        if (frame == -1)
-            texcoord = TEXCOORD_FROM_ID[index];
-        else
-            texcoord = frames[frame * 4 + index];
-        texcoord.y = 1 - texcoord.y;
-     }
-     ")
-
-    [fragment]
-    ("
-     void main()
-     {
-        color = texture(tex, texcoord);
-     }
-     ")
-);
 
 /*
 #[test]
@@ -537,9 +366,12 @@ impl Texture {
 
 // NOTE don't instantiate these willy nilly!
 pub struct ImageAsset {
+    // TODO is it bad to keep this pointer? I would reckon no.
+    pub gl_data:        *const GLData,
     pub filename:       &'static str,
     pub vbo:            GLuint,
     pub set_attributes: extern "Rust" fn(GLuint),
+    pub shader:         extern "Rust" fn(&GLData) -> &assets::Shader,
     pub texture:        Texture,
     pub frame_width:    usize,
     pub frame_height:   usize,
@@ -578,19 +410,18 @@ impl ImageAsset {
     }
 
     // Sets the texture, and the attributes
-    pub fn set(
-        &mut self,
-        tex_uniform: GLint,
-        sprite_size_uniform: GLint,
-        frames_uniform: GLint
-    ) {
+    pub unsafe fn set(&mut self) {
+        let set_attributes = self.set_attributes;
+        let get_shader     = self.shader;
+        let shader = get_shader(transmute(self.gl_data));
+
+        gl::UseProgram(shader.program);
         self.texture.set(
-            tex_uniform,
-            sprite_size_uniform,
-            frames_uniform,
+            shader.tex_uniform,
+            shader.sprite_size_uniform,
+            shader.frames_uniform,
             self.frame_width as f32, self.frame_height as f32
         );
-        let set_attributes = self.set_attributes;
         set_attributes(self.vbo);
     }
 

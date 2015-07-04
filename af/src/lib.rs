@@ -11,11 +11,11 @@ use std::sync::mpsc::Receiver;
 use glfw::{Action, Context, Key};
 use libc::{c_void};
 use vecmath::Vec2;
-use std::ffi::CString;
 use std::mem::{size_of, size_of_val, transmute};
 use std::ptr;
 use std::slice;
-use render::{SpriteType1};
+use render::{GLData};
+use assets::SpriteType1;
 
 macro_rules! check_error(
     () => (
@@ -47,25 +47,6 @@ macro_rules! stride(
     ($val:expr) => (($val * size_of::<GLfloat>() as i32))
 );
 
-pub struct GLData {
-    // === Global buffers ===
-    pub vao: GLuint,
-    pub square_vbo: GLuint,
-    pub square_ebo: GLuint,
-
-    // === Shader information ===
-    pub shader_prog:         GLuint,
-    pub cam_pos_uniform:     GLint,
-    pub scale_uniform:       GLint,
-    pub sprite_size_uniform: GLint,
-    pub screen_size_uniform: GLint,
-    pub tex_uniform:         GLint,
-    pub frames_uniform:      GLint,
-
-    // === Hardcoded textures/texcoords ===
-    pub images: assets::Images
-}
-
 pub struct GameData {
     pub cam_pos: Vec2<f32>,
 
@@ -96,7 +77,9 @@ pub unsafe extern "C" fn load(
         game.cam_pos.y = 0.0;
 
         // ============== OpenGL ================
-        gl_data.images.init();
+        // Defying borrow checker here:
+        let gl_data_ptr: usize = transmute(gl_data as *const GLData);
+        gl_data.images.init(transmute(gl_data_ptr));
 
         // === Blending for alpha ===
         gl::Enable(gl::BLEND);
@@ -130,9 +113,13 @@ pub unsafe extern "C" fn load(
         );
 
         // === Shaders and texcoords ===
-        if !compile_shaders(gl_data, game, window) {
-            panic!("Cannot continue due to shader error.");
+        let failed = assets::Shaders::compile(gl_data, window);
+        if failed.len() > 0 {
+            panic!("Failed to compile: {:?}", failed);
         }
+        gl_data.shaders.each_shader(|shader, _name| {
+            gl::Uniform2f(shader.cam_pos_uniform, game.cam_pos.x, game.cam_pos.y);
+        });
 
         gl_data.images.crattlecrute_front_foot.load();
         gl_data.images.crattlecrute_body.load();
@@ -146,57 +133,14 @@ pub unsafe extern "C" fn load(
             .empty_buffer_data::<SpriteType1>(1, gl::DYNAMIC_DRAW);
     }
     else {
-        if !compile_shaders(gl_data, game, window) {
-            println!("Due to errors, shaders were not reloaded.");
+        let failed = assets::Shaders::compile(gl_data, window);
+        if failed.len() > 0 {
+            println!("Shaders: {:?} failed to compile and were not reloaded.", failed);
         }
+        gl_data.shaders.each_shader(|shader, _name| {
+            gl::Uniform2f(shader.cam_pos_uniform, game.cam_pos.x, game.cam_pos.y);
+        });
     }
-}
-
-fn compile_shaders(gl_data: &mut GLData, game: &GameData, window: &glfw::Window) -> bool {
-    let existing_program = unsafe {
-        if gl::IsProgram(gl_data.shader_prog) == gl::TRUE {
-            Some(gl_data.shader_prog)
-        } else { None }
-    };
-
-    gl_data.shader_prog = match render::create_program(SpriteType1::vertex_shader(), SpriteType1::fragment_shader()) {
-        Some(program) => program,
-        None          => return false
-    };
-    unsafe {
-        gl::UseProgram(gl_data.shader_prog);
-
-        let cam_pos_str         = CString::new("cam_pos".to_string()).unwrap();
-        gl_data.cam_pos_uniform = gl::GetUniformLocation(gl_data.shader_prog, cam_pos_str.as_ptr());
-
-        let scale_str         = CString::new("scale".to_string()).unwrap();
-        gl_data.scale_uniform = gl::GetUniformLocation(gl_data.shader_prog, scale_str.as_ptr());
-
-        let sprite_size_str         = CString::new("sprite_size".to_string()).unwrap();
-        gl_data.sprite_size_uniform = gl::GetUniformLocation(gl_data.shader_prog, sprite_size_str.as_ptr());
-
-        let screen_size_str         = CString::new("screen_size".to_string()).unwrap();
-        gl_data.screen_size_uniform = gl::GetUniformLocation(gl_data.shader_prog, screen_size_str.as_ptr());
-
-        let tex_str         = CString::new("tex".to_string()).unwrap();
-        gl_data.tex_uniform = gl::GetUniformLocation(gl_data.shader_prog, tex_str.as_ptr());
-
-        let frames_str         = CString::new("frames".to_string()).unwrap();
-        gl_data.frames_uniform = gl::GetUniformLocation(gl_data.shader_prog, frames_str.as_ptr());
-
-        gl::Uniform2f(gl_data.cam_pos_uniform, game.cam_pos.x, game.cam_pos.y);
-        gl::Uniform1f(gl_data.scale_uniform, 1.0);
-        match window.get_size() {
-            (width, height) => gl::Uniform2f(gl_data.screen_size_uniform, width as f32, height as f32)
-        }
-
-        match existing_program {
-            Some(program) => gl::DeleteProgram(program),
-            _ => {}
-        }
-    }
-
-    true
 }
 
 #[no_mangle]
@@ -210,7 +154,11 @@ pub extern "C" fn update(
     glfw.poll_events();
 
     // === INPUT ===
+    // this flip_player was just for testing
     let mut flip_player = false;
+
+    let mut new_window_size: Option<(GLfloat, GLfloat)> = None;
+
     for (_, event) in glfw::flush_messages(&events) {
         match event {
             glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
@@ -232,7 +180,8 @@ pub extern "C" fn update(
 
             glfw::WindowEvent::Size(width, height) => unsafe {
                 gl::Viewport(0, 0, width, height);
-                gl::Uniform2f(gl_data.screen_size_uniform, width as f32, height as f32);
+                new_window_size = Some((width as GLfloat, height as GLfloat));
+                // gl::Uniform2f(gl_data.screen_size_uniform, width as f32, height as f32);
             },
 
             _ => {}
@@ -245,7 +194,9 @@ pub extern "C" fn update(
             ($($img:ident),+) => {
                 $({
                 gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.images.$img.vbo);
+        check_error!();
                 let buffer = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
+        check_error!();
                 let sprites = slice::from_raw_parts_mut::<SpriteType1>(
                     transmute(buffer),
                     1 // TODO <- number of players
@@ -257,6 +208,7 @@ pub extern "C" fn update(
                     flipped:  flip_player as GLint
                 };
                 gl::UnmapBuffer(gl::ARRAY_BUFFER);
+        check_error!();
                 });*
             }
         };
@@ -266,29 +218,32 @@ pub extern "C" fn update(
 
     // === RENDER ===
     unsafe {
-        gl::Uniform2f(gl_data.cam_pos_uniform, game.cam_pos.x, game.cam_pos.y);
+        gl_data.shaders.each_shader(|shader, _name| {
+            match new_window_size {
+                Some((width, height)) => gl::Uniform2f(shader.screen_size_uniform, width, height),
+                None => {}
+            }
+            gl::Uniform2f(shader.cam_pos_uniform, game.cam_pos.x, game.cam_pos.y);
+        });
 
         gl::ClearColor(0.1, 0.1, 0.3, 1.0);
         gl::Clear(gl::COLOR_BUFFER_BIT);
 
         macro_rules! renderplr {
             ($img:expr) => {
-                $img.set(
-                    gl_data.tex_uniform,
-                    gl_data.sprite_size_uniform,
-                    gl_data.frames_uniform,
-                );
+                $img.set();
                 gl::DrawElementsInstanced(
                 // TODO last argument here will be number of render calls counted for player!
                     gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null(), 1
                 );
             }
         };
+
+
         renderplr!(gl_data.images.crattlecrute_front_foot);
         renderplr!(gl_data.images.crattlecrute_body);
         renderplr!(gl_data.images.crattlecrute_back_foot);
 
-        check_error!();
     }
 
     window.swap_buffers();
