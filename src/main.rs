@@ -22,16 +22,13 @@ use osx as platform;
 use std::path::Path;
 use std::fs;
 use glfw::{Context};
-use libc::{c_char, c_void, c_int};
+use libc::c_void;
 use std::dynamic_lib::DynamicLibrary;
 use std::thread;
 // use std::c_str::ToCStr;
 use std::mem::{transmute, uninitialized, drop};
 use std::sync::mpsc::channel;
-use std::sync::mpsc::{Sender, Receiver};
-use std::ffi::CString;
-use std::ptr;
-use std::slice;
+use std::sync::mpsc::Receiver;
 
 type LoadFn = extern "C" fn (
     bool, // first load?
@@ -51,31 +48,20 @@ type UpdateFn = extern "C" fn (
     &Receiver<(f64, glfw::WindowEvent)>
 );
 
-static GAME_LIB_DIR: &'static str = "./af/target/debug/";
-#[cfg(unix)]
-static GAME_LIB_PATH: &'static str = "./af/target/debug/libaf.so";
-#[cfg(windows)]
-static GAME_LIB_PATH: &'static str = "./af/target/debug/af.dll";
-
-#[cfg(unix)]
-static GAME_LIB_FILE: &'static str = "./libaf.so";
-#[cfg(windows)]
-static GAME_LIB_FILE: &'static str = "./af.dll";
-
 // Glfw shit
 extern "C" {
     pub static _glfw: *const c_void;
 }
 
 fn copy_game_lib_to_cwd() {
-    match fs::copy(GAME_LIB_PATH, GAME_LIB_FILE) {
-        Err(e) => panic!("Couldn't copy {}: {}", GAME_LIB_PATH, e),
+    match fs::copy(platform::GAME_LIB_PATH, platform::GAME_LIB_FILE) {
+        Err(e) => panic!("Couldn't copy {}: {}", platform::GAME_LIB_PATH, e),
         _ => {}
     }
 }
 
 fn load_game_lib() -> DynamicLibrary {
-    let dylib_path = Path::new(GAME_LIB_FILE);
+    let dylib_path = Path::new(platform::GAME_LIB_FILE);
 
     match DynamicLibrary::open(Some(dylib_path)) {
         Ok(lib) => lib,

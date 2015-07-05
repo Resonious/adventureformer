@@ -1,4 +1,10 @@
-
+use std::path::Path;
+use libc::{c_int, c_void, c_char};
+use std::mem::transmute;
+use std::ptr;
+use std::ffi::CString;
+use std::sync::mpsc::Sender;
+use std::slice;
 
 #[repr(C)]
 struct Win32SecurityAttributes {
@@ -44,19 +50,6 @@ extern "C" {
         completion_routine: *const c_void
     ) -> i32;
 
-    fn FindFirstChangeNotificationA(
-        path:          *const c_char,
-        watch_subtree: bool,
-        filter:        c_int
-    ) -> *const c_void;
-
-    fn FindNextChangeNotification(handle: *const c_void) -> bool;
-
-    fn WaitForSingleObject(
-        handle:     *const c_void,
-        timeout_ms: c_int
-    ) -> c_int;
-
     fn QueryPerformanceCounter(out: *mut i64) -> bool;
     fn QueryPerformanceFrequency(out: *mut i64) -> bool;
 
@@ -74,6 +67,10 @@ const FILE_SHARE_WRITE:  i32 = 0x00000002;
 const FILE_FLAG_BACKUP_SEMANTICS: i32 = 0x02000000;
 
 const OPEN_EXISTING: i32 = 3;
+
+pub static GAME_LIB_DIR: &'static str = "./af/target/debug/";
+pub static GAME_LIB_PATH: &'static str = "./af/target/debug/af.dll";
+pub static GAME_LIB_FILE: &'static str = "./af.dll";
 
 pub fn query_performance_frequency() -> i64 {
     let mut freq = 0i64;

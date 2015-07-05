@@ -13,6 +13,10 @@ extern "C" {
     fn mach_timebase_info(info: &mut TimebaseInfo);
 }
 
+pub static GAME_LIB_DIR: &'static str = "./af/target/debug/";
+pub static GAME_LIB_PATH: &'static str = "./af/target/debug/libaf.so";
+pub static GAME_LIB_FILE: &'static str = "./libaf.so";
+
 pub fn query_performance_counter(counter: &mut i64) {
     unsafe {
         let mut time = mach_absolute_time();
