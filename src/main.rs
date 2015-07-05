@@ -4,6 +4,21 @@ extern crate gl;
 extern crate glfw;
 extern crate libc;
 
+#[cfg(windows)]
+pub mod win32;
+#[cfg(windows)]
+use win32 as platform;
+
+#[cfg(target_os = "linux")]
+pub mod linux;
+#[cfg(target_os = "linux")]
+use linux as platform;
+
+#[cfg(target_os = "macos")]
+pub mod osx;
+#[cfg(target_os = "macos")]
+use osx as platform;
+
 use std::path::Path;
 use std::fs;
 use glfw::{Context};
@@ -35,87 +50,6 @@ type UpdateFn = extern "C" fn (
     &glfw::Window,
     &Receiver<(f64, glfw::WindowEvent)>
 );
-
-// Windows shit
-#[repr(C)]
-#[cfg(windows)]
-pub struct Win32SecurityAttributes {
-    length: i32, // always size_off::<Win32SecurityAttributes>()
-    security_descriptor: *const c_void,
-    inherit_handle:      bool
-}
-
-#[cfg(windows)]
-#[repr(C)]
-pub struct Win32FileNotifyInformation {
-    next_entry_offset: i32,
-    action:            i32,
-    file_name_length:  i32,
-    first_file_name_char: u16
-}
-
-#[cfg(windows)]
-impl Win32FileNotifyInformation {
-    pub fn file_name(&self) -> String { unsafe {
-        let v = slice::from_raw_parts(&self.first_file_name_char, self.file_name_length as usize);
-        String::from_utf16_lossy(v)
-    }}
-}
-
-#[cfg(windows)]
-extern "C" {
-    pub fn CreateFileA(
-        file_name:            *const c_char,
-        desired_access:       i32,
-        share_mode:           i32,
-        security_attributes:  *const Win32SecurityAttributes,
-        creation_disposition: i32,
-        flags_and_attributes: i32,
-        template_file:        *const c_void
-    ) -> *const c_void;
-
-    pub fn ReadDirectoryChangesW(
-        directory:          *const c_void, // Retrieved from CreateFile
-        buffer:             *const c_void, // Gets dynamically filled with Win32FileNotifyInformation
-        buffer_length:      i32,
-        watch_subtree:      bool,
-        notify_filter:      i32,
-        bytes_returned:     *const i32,
-        overlapped:         *const c_void,
-        completion_routine: *const c_void
-    ) -> i32;
-
-    pub fn FindFirstChangeNotificationA(
-        path:          *const c_char,
-        watch_subtree: bool,
-        filter:        c_int
-    ) -> *const c_void;
-
-    pub fn FindNextChangeNotification(handle: *const c_void) -> bool;
-
-    pub fn WaitForSingleObject(
-        handle:     *const c_void,
-        timeout_ms: c_int
-    ) -> c_int;
-
-    pub fn QueryPerformanceCounter(out: *mut i64) -> bool;
-    pub fn QueryPerformanceFrequency(out: *mut i64) -> bool;
-
-    pub fn GetLastError() -> c_int;
-}
-const FILE_NOTIFY_CHANGE_LAST_WRITE: i32 = 0x00000010;
-const INVALID_HANDLE_VALUE: *const c_void = -1 as *const c_void;
-
-const FILE_LIST_DIRECTORY: i32 = 1;
-
-const FILE_SHARE_DELETE: i32 = 0x00000004;
-const FILE_SHARE_READ:   i32 = 0x00000001;
-const FILE_SHARE_WRITE:  i32 = 0x00000002;
-
-const FILE_FLAG_BACKUP_SEMANTICS: i32 = 0x02000000;
-
-const OPEN_EXISTING: i32 = 3;
-
 
 static GAME_LIB_DIR: &'static str = "./af/target/debug/";
 #[cfg(unix)]
@@ -165,84 +99,6 @@ fn load_symbols_from(lib: &DynamicLibrary) -> (LoadFn, UpdateFn) {
     }
 }
 
-#[cfg(windows)]
-fn query_performance_frequency() -> i64 {
-    let mut freq = 0i64;
-    unsafe {
-        if !QueryPerformanceFrequency(&mut freq) {
-            panic!("Couldn't query performance frequency. Error code {}.", GetLastError());
-        }
-    }
-    freq
-}
-#[cfg(windows)]
-fn query_performance_counter(counter: &mut i64) {
-    unsafe {
-        if !QueryPerformanceCounter(counter) {
-            panic!("Couldn't query performance counter. Error code {}.", GetLastError());
-        }
-    }
-}
-
-#[cfg(windows)]
-unsafe fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
-    let dylib_dir  = Path::new(GAME_LIB_DIR);
-
-    let dylib_dir_str = CString::new(dylib_dir.to_str().unwrap()).unwrap();
-    let handle = CreateFileA(
-        dylib_dir_str.as_ptr(),
-        FILE_LIST_DIRECTORY,
-        FILE_SHARE_DELETE|FILE_SHARE_READ|FILE_SHARE_WRITE,
-        ptr::null(),
-        OPEN_EXISTING,
-        FILE_FLAG_BACKUP_SEMANTICS,
-        ptr::null()
-    );
-    if handle == INVALID_HANDLE_VALUE {
-        match GetLastError() {
-            5 => panic!("CreateFile for {} failed: Access denied", dylib_dir.display()),
-            error_code => panic!("CreateFile for {} failed: Error code {}", dylib_dir.display(), error_code)
-        }
-    }
-
-    let results_buffer = [0u8; 1024];
-    let results_size: i32 = 0;
-
-    loop {
-        match ReadDirectoryChangesW(
-            handle,
-            transmute(&results_buffer[0]),
-            results_buffer.len() as i32,
-            false,
-            FILE_NOTIFY_CHANGE_LAST_WRITE,
-            &results_size,
-            ptr::null(),
-            ptr::null()
-        ) {
-            0 => println!("Failed to listen for a lib change! {}", GetLastError()),
-
-            _ => {
-                let result = transmute::<_, &Win32FileNotifyInformation>(&results_buffer[0]);
-                if result.next_entry_offset != 0 {
-                    panic!("YO, there are multiple entries. Handle that shit.");
-                }
-                let file_name = result.file_name();
-
-                // NOTE Windows seems to just give back garbage string sizes, so
-                // this file name is 'af.dll' fused with 'af.metadata.o'
-                if file_name == "af.dlladata." {
-                    sender.send(()).unwrap();
-                }
-            }
-        }
-    }
-}
-
-#[cfg(unix)]
-fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
-    println!("on linux machine - no hot code update for now!");
-}
-
 fn main() {
     let glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
 
@@ -267,7 +123,7 @@ fn main() {
     let (game_lib_sender, game_lib_receiver) = channel();
     unsafe {
         let _t = thread::Builder::new().name("Game Lib Updater".to_string()).spawn(
-            move || watch_for_updated_game_lib(&game_lib_sender)
+            move || platform::watch_for_updated_game_lib(&game_lib_sender)
         );
         load(
             true,
@@ -280,11 +136,11 @@ fn main() {
 
     let mut last_frame_time = 0i64;
     let mut this_frame_time = 0i64;
-    let ticks_per_second = query_performance_frequency() as f32;
+    let ticks_per_second = platform::query_performance_frequency() as f32;
 
     while !window.should_close() {
         unsafe {
-            query_performance_counter(&mut this_frame_time);
+            platform::query_performance_counter(&mut this_frame_time);
 
             match game_lib_receiver.try_recv() {
                 Ok(()) => {
