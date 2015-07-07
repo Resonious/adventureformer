@@ -189,7 +189,8 @@ macro_rules! shader_assets {
                 pub fn vertex_shader() -> String {
                     let mut vertex = String::with_capacity(4092);
                     vertex.push_str("
-                        #version 330 core
+                        #version 300 es
+                        precision mediump float;
 
                         // Per vertex, normalized:
                         layout (location = 0) in vec2 vertex_pos;
@@ -237,7 +238,9 @@ macro_rules! shader_assets {
                 pub fn fragment_shader() -> String {
                     let mut fragment = String::with_capacity(1028);
                     fragment.push_str("
-                        #version 330 core
+                        #version 300 es
+                        precision mediump float;
+
                         in vec2 texcoord;
                         out vec4 color;
                         uniform sampler2D tex;

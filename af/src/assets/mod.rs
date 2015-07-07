@@ -27,7 +27,7 @@ SpriteType1:
     ("
      void main()
      {
-        vec2 pixel_screen_pos = (position - cam_pos) * 2;
+        vec2 pixel_screen_pos = (position - cam_pos) * 2.0;
         gl_Position = vec4(
             (vertex_pos * from_pixel(sprite_size) + from_pixel(pixel_screen_pos)) * scale,
             0.0f, 1.0f
@@ -37,7 +37,7 @@ SpriteType1:
             texcoord = TEXCOORD_FROM_ID[index];
         else
             texcoord = frames[frame * 4 + index];
-        texcoord.y = 1 - texcoord.y;
+        texcoord.y = 1.0 - texcoord.y;
      }
      ")
 
@@ -66,16 +66,16 @@ SpriteType1Color2:
      vec4 color_from(int color)
      {
          return vec4(
-             float((color & 0xFF000000) >> 24) / 255,
-             float((color & 0x00FF0000) >> 16) / 255,
-             float((color & 0x0000FF00) >>  8) / 255,
-             float(color & 0x000000FF)         / 255
+             float((color & 0xFF000000) >> 24) / 255.0,
+             float((color & 0x00FF0000) >> 16) / 255.0,
+             float((color & 0x0000FF00) >>  8) / 255.0,
+             float(color & 0x000000FF)         / 255.0
          );
      }
 
      void main()
      {
-         vec2 pixel_screen_pos = (position - cam_pos) * 2;
+         vec2 pixel_screen_pos = (position - cam_pos) * 2.0;
          gl_Position = vec4(
              (vertex_pos * from_pixel(sprite_size) + from_pixel(pixel_screen_pos)) * scale,
              0.0f, 1.0f
@@ -85,7 +85,7 @@ SpriteType1Color2:
              texcoord = TEXCOORD_FROM_ID[index];
          else
              texcoord = frames[frame * 4 + index];
-         texcoord.y = 1 - texcoord.y;
+         texcoord.y = 1.0 - texcoord.y;
 
          cswap1_from = color_from(color_swap_1.x);
          cswap1_to   = color_from(color_swap_1.y);
@@ -117,9 +117,6 @@ SpriteType1Color2:
             color = cswap1_to;
         else if (approx(color, cswap2_from, 0.1))
             color = cswap2_to;
-
-        // LE DEBUGGING
-        // color = vec4(cswap1_from.rgb, color.a);
      }
      ")
 );
