@@ -16,7 +16,7 @@ use std::mem::{size_of, size_of_val, transmute};
 use std::ptr;
 use std::slice;
 use render::{GLData};
-use assets::SpriteType2Color2;
+use assets::{SpriteType2Color2, SpriteType3Color1};
 use controls::Controls;
 
 macro_rules! check_error(
@@ -134,10 +134,12 @@ pub unsafe extern "C" fn load(
         gl_data.images.crattlecrute_front_foot.load();
         gl_data.images.crattlecrute_body.load();
         gl_data.images.crattlecrute_back_foot.load();
+        gl_data.images.eye_1.load();
         // TODO Just one player for now
         gl_data.images.crattlecrute_front_foot.empty_buffer_data(1, gl::DYNAMIC_DRAW);
         gl_data.images.crattlecrute_body.empty_buffer_data(1, gl::DYNAMIC_DRAW);
         gl_data.images.crattlecrute_back_foot.empty_buffer_data(1, gl::DYNAMIC_DRAW);
+        gl_data.images.eye_1.empty_buffer_data(1, gl::DYNAMIC_DRAW);
     }
     else {
         let failed = assets::Shaders::compile(gl_data, window);
@@ -259,6 +261,23 @@ pub extern "C" fn update(
             }
         };
         plrdata!(crattlecrute_front_foot, crattlecrute_body, crattlecrute_back_foot);
+
+        gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.images.eye_1.vbo);
+        let buffer = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
+        let sprites = slice::from_raw_parts_mut::<SpriteType3Color1>(
+            transmute(buffer),
+            1
+        );
+        sprites[0] = SpriteType3Color1 {
+            position: Vec2::new(5.0, 5.0),
+            frame:    0,
+            flipped:  0,
+            angle:    game.player_angle,
+            focus:    Vec2::new(2, 0),
+            color_swap: Vec2::new(0x5900FFFF, (game.player_angle * 10.0) as u32)
+        };
+        gl::UnmapBuffer(gl::ARRAY_BUFFER);
+
         gl::BindBuffer(gl::ARRAY_BUFFER, 0);
     }
 
@@ -289,6 +308,7 @@ pub extern "C" fn update(
         renderplr!(gl_data.images.crattlecrute_front_foot);
         renderplr!(gl_data.images.crattlecrute_body);
         renderplr!(gl_data.images.crattlecrute_back_foot);
+        renderplr!(gl_data.images.eye_1);
 
     }
 

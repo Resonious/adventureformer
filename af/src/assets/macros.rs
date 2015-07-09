@@ -224,10 +224,38 @@ macro_rules! shader_assets {
                         {
                             return pos / screen_size;
                         }
+                        ivec2 from_pixel(ivec2 pos)
+                        {
+                            return pos / ivec2(screen_size);
+                        }
 
                         int flipped_vertex_id()
                         {
                             return 3 - gl_VertexID;
+                        }
+
+                        // NOTE this only applies to a square...
+                        const float VERT_DIST = 1.41421356237;
+
+                        const float ANGLE_OFFSETS[4] = float[4](
+                            // pi/4
+                            0.78539816339,
+                            // 7pi/4
+                            5.49778714378,
+                            // 5pi/4
+                            3.92699081699,
+                            // 3pi/4
+                            2.35619449019
+                        );
+
+                        vec4 color_from(int color)
+                        {
+                            return vec4(
+                                float((color & 0xFF000000) >> 24) / 255.0,
+                                float((color & 0x00FF0000) >> 16) / 255.0,
+                                float((color & 0x0000FF00) >>  8) / 255.0,
+                                float(color & 0x000000FF)         / 255.0
+                            );
                         }
                     ");
                     vertex.push_str($vertmain);
@@ -244,6 +272,14 @@ macro_rules! shader_assets {
                         in vec2 texcoord;
                         out vec4 color;
                         uniform sampler2D tex;
+
+                        bool approx(vec4 a, vec4 b, float alpha)
+                        {
+                            return abs(a.x - b.x) <= alpha &&
+                                   abs(a.y - b.y) <= alpha &&
+                                   abs(a.z - b.z) <= alpha &&
+                                   abs(a.w - b.w) <= alpha;
+                        }
                     ");
                     fragment.push_str($fragmain);
 
