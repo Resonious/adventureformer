@@ -1,4 +1,4 @@
-#![feature(std_misc, negate_unsigned)]
+#![feature(std_misc, negate_unsigned, dynamic_lib)]
 
 extern crate gl;
 extern crate glfw;

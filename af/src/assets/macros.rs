@@ -234,9 +234,9 @@ macro_rules! shader_assets {
                             return 3 - gl_VertexID;
                         }
 
-                        // NOTE this only applies to a square...
+                        // These are I suppose an optimization for squares
+                        // rotating about their centers.
                         const float VERT_DIST = 1.41421356237;
-
                         const float ANGLE_OFFSETS[4] = float[4](
                             // pi/4
                             0.78539816339,
@@ -250,6 +250,7 @@ macro_rules! shader_assets {
 
                         vec4 color_from(int color)
                         {
+                            // Totally assumes little endian...
                             return vec4(
                                 float((color & 0xFF000000) >> 24) / 255.0,
                                 float((color & 0x00FF0000) >> 16) / 255.0,

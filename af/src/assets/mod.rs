@@ -15,7 +15,8 @@ image_assets!(
     ccbdy crattlecrute_body:       SpriteType2Color2 [9][90;90] "assets/crattlecrute/body.png",
     ccbft crattlecrute_back_foot:  SpriteType2Color2 [9][90;90] "assets/crattlecrute/back-foot.png",
     ccfft crattlecrute_front_foot: SpriteType2Color2 [9][90;90] "assets/crattlecrute/front-foot.png",
-    ceye1 eye_1: SpriteType3Color1 [1][4;5] "assets/eyes/standard-eye.png"
+    ceye1 eye_1:     SpriteType3Color1 [1][4;5] "assets/eyes/standard-eye.png",
+    tstsp test_spin: SpriteType3Color1 [9][90;90] "assets/crattlecrute/body.png"
 );
 
 shader_assets!(
@@ -127,17 +128,20 @@ SpriteType3Color1:
      void main()
      {
          vec2 pixel_screen_pos = (position - cam_pos) * 2.0;
-         vec2 rel_focus = vec2(from_pixel(focus));
+         vec2 rel_focus = vec2(focus) / sprite_size * 2.0;
 
          vec2 vert_offset = vertex_pos - rel_focus;
          float vert_angle = angle + atan(vert_offset.y, vert_offset.x);
-         float dist = sqrt(dot(vert_offset, vert_offset));
-         vec2 vert = dist * vec2(cos(vert_angle), sin(vert_angle)) + vert_offset;
+         vec2 direction   = vec2(cos(vert_angle), sin(vert_angle));
+         float distance   = sqrt(dot(vert_offset, vert_offset));
+
+         vec2 vert = distance * direction + rel_focus;
 
          gl_Position = vec4(
              (vert * from_pixel(sprite_size) + from_pixel(pixel_screen_pos)) * scale,
              0.0f, 1.0f
          );
+
          int index = flipped != 0 ? flipped_vertex_id() : gl_VertexID;
          if (frame == -1)
              texcoord = TEXCOORD_FROM_ID[index];
