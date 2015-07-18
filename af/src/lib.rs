@@ -307,14 +307,17 @@ pub extern "C" fn update(
     // === RENDER ===
     unsafe {
         gl_data.shaders.each_shader(|shader, _name| {
+            gl::UseProgram(shader.program);
             match new_window_size {
-                Some((width, height)) => gl::Uniform2f(shader.screen_size_uniform, width, height),
+                Some((width, height)) => {
+                    gl::Uniform2f(shader.screen_size_uniform, width, height);
+                }
                 None => {}
             }
             gl::Uniform2f(shader.cam_pos_uniform, game.cam_pos.x, game.cam_pos.y);
         });
 
-        gl::ClearColor(0.1, 0.1, 0.3, 1.0);
+        gl::ClearColor(0.2, 0.2, 0.3, 1.0);
         gl::Clear(gl::COLOR_BUFFER_BIT);
 
         macro_rules! renderplr {
@@ -326,7 +329,6 @@ pub extern "C" fn update(
                 );
             }
         };
-
 
         renderplr!(gl_data.images.test_spin);
         renderplr!(gl_data.images.crattlecrute_front_foot);
