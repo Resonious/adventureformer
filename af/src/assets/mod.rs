@@ -53,6 +53,7 @@ SpriteType1:
      ")
 
 // Frames, flipping, rotates around center, 2 colors can be swapped.
+// Position refers to the center of the sprite.
 SpriteType2Color2:
 
     [vertex]
@@ -73,7 +74,7 @@ SpriteType2Color2:
          vec2 pixel_screen_pos = (position - cam_pos) * 2.0;
 
          float vert_angle = angle + ANGLE_OFFSETS[gl_VertexID];
-         vec2 vert = VERT_DIST * vec2(cos(vert_angle), sin(vert_angle)) + vec2(1.0, 1.0);
+         vec2 vert = VERT_DIST * vec2(cos(vert_angle), sin(vert_angle));
 
          gl_Position = vec4(
              (vert * from_pixel(sprite_size) + from_pixel(pixel_screen_pos)) * scale,
@@ -135,7 +136,7 @@ SpriteType3Color1:
          vec2 direction   = vec2(cos(vert_angle), sin(vert_angle));
          float distance   = sqrt(dot(vert_offset, vert_offset));
 
-         vec2 vert = distance * direction + rel_focus;
+         vec2 vert = distance * direction;
 
          gl_Position = vec4(
              (vert * from_pixel(sprite_size) + from_pixel(pixel_screen_pos)) * scale,

@@ -309,9 +309,8 @@ pub extern "C" fn update(
         gl_data.shaders.each_shader(|shader, _name| {
             gl::UseProgram(shader.program);
             match new_window_size {
-                Some((width, height)) => {
-                    gl::Uniform2f(shader.screen_size_uniform, width, height);
-                }
+                Some((width, height)) =>
+                    gl::Uniform2f(shader.screen_size_uniform, width, height),
                 None => {}
             }
             gl::Uniform2f(shader.cam_pos_uniform, game.cam_pos.x, game.cam_pos.y);
