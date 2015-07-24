@@ -89,7 +89,7 @@ fn main() {
     let glfw = glfw::init(glfw::FAIL_ON_ERRORS).unwrap();
 
     let (mut window, events) = glfw
-        .create_window(300, 300, "Hello this is window", glfw::WindowMode::Windowed)
+        .create_window(500, 500, "Hello this is window", glfw::WindowMode::Windowed)
         .expect("Failed to create GLFW window.");
 
     gl::load_with(|s| window.get_proc_address(s));
