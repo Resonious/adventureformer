@@ -28,7 +28,7 @@ pub fn query_performance_counter(counter: &mut i64) {
     unsafe {
         let mut time: Timespec = uninitialized();
         if clock_gettime(CLOCK_MONOTOMIC_RAW, &mut time) != 0 { panic!("Error retrieving clock time") }
-        *counter = time.tv_nsec as i64;
+        *counter = ((time.tv_sec * 1_000_000_000) as i64 + time.tv_nsec) as i64;
     }
 }
 

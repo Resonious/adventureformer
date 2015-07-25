@@ -45,7 +45,8 @@ type UpdateFn = extern "C" fn (
     f32, // delta time
     &glfw::Glfw,
     &glfw::Window,
-    &Receiver<(f64, glfw::WindowEvent)>
+    &Receiver<(f64, glfw::WindowEvent)>,
+    i64
 );
 
 // Glfw shit
@@ -147,14 +148,15 @@ fn main() {
             }
 
             let delta_time =
-                if last_frame_time == 0 { 1.0/60.0 }
+                if last_frame_time <= 0 { 1.0/60.0 }
                 else { ((this_frame_time - last_frame_time) as f32) / ticks_per_second };
 
             update(
                 transmute(&mut game_memory[0]),
                 transmute(&mut gl_memory[0]),
                 delta_time,
-                &glfw, &window, &events
+                &glfw, &window, &events,
+                this_frame_time
             );
 
             last_frame_time = this_frame_time;

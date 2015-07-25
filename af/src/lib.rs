@@ -54,11 +54,11 @@ pub struct GameData {
     pub time_counter: f32,
     pub frame_counter: i32,
 
-    pub cam_pos: Vec2<f32>,
+    pub cam_pos: Vec2<GLfloat>,
 
     pub controls: Controls,
 
-    pub player_pos: Vec2<f32>,
+    pub player_pos: Vec2<GLfloat>,
     pub player_angle: GLfloat,
     pub flip_player: bool,
     pub player_frame: GLint
@@ -179,7 +179,8 @@ pub extern "C" fn update(
     delta_t: f32,
     glfw:    &mut glfw::Glfw,
     window:  &mut glfw::Window,
-    events:  &Receiver<(f64, glfw::WindowEvent)>
+    events:  &Receiver<(f64, glfw::WindowEvent)>,
+    time:    i64
 ) {
     // === Count Frames Per Second ===
     game.time_counter += delta_t;
@@ -258,10 +259,14 @@ pub extern "C" fn update(
             game.player_angle -= 3.14159 * delta_t;
         }
         if game.controls.debug.just_down() {
-            // println!("time_counter: {} | delta: {} | fps: {}", game.time_counter, delta_t, game.fps);
+            println!("Time: {}", time);
+
             game.player_angle = 0.0;
             game.player_frame += 1;
             if game.player_frame >= 9 { game.player_frame = 1 }
+        }
+        if delta_t < 0.0 {
+            println!("Delta time < 0!!! {}", delta_t);
         }
 
         macro_rules! plrdata {
@@ -299,7 +304,6 @@ pub extern "C" fn update(
         let eye_color = (((game.player_angle / 6.28 * 255.0) as u32) << 8) | 0x000000FF;
         let eye_offset = &TEST_OFFSETS[game.player_frame as usize];
         let eye_center = Vec2::new(2, 2);
-        let x_mul = if (game.flip_player) { Vec2::new(-1, 1) } else { Vec2::s(1) };
         sprites[0] = SpriteType3Color1 {
             position: game.player_pos,
             frame:    0,
