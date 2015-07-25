@@ -126,7 +126,7 @@ macro_rules! shader_assets {
                             shader.frames_uniform = gl::GetUniformLocation(program, frames_str.as_ptr());
 
                             // TODO this should maybe be handled elsewhere
-                            gl::Uniform1f(shader.scale_uniform, 1.0);
+                            gl::Uniform1f(shader.scale_uniform, 2.0);
                             match window.get_size() {
                                 (width, height) => gl::Uniform2f(shader.screen_size_uniform, width as f32, height as f32)
                             }

@@ -129,7 +129,9 @@ SpriteType3Color1:
      void main()
      {
          vec2 pixel_screen_pos = (position - cam_pos) * 2.0;
-         vec2 rel_focus = vec2(focus) / sprite_size * 2.0;
+         vec2 effective_focus = flipped == 0 ?
+             vec2(focus) : vec2(sprite_size.x - float(focus.x), focus.y);
+         vec2 rel_focus = effective_focus / sprite_size * 2.0;
 
          vec2 vert_offset = vertex_pos - rel_focus;
          float vert_angle = angle + atan(vert_offset.y, vert_offset.x);

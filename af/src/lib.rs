@@ -154,6 +154,24 @@ pub unsafe extern "C" fn load(
     }
 }
 
+struct Offset {
+    pub pos: Vec2<GLint>,
+    pub angle: GLfloat
+}
+
+// THIS WILL BE GENERATED
+static TEST_OFFSETS: [Offset; 9] = [
+    Offset { pos: Vec2::<GLint> { x: 29, y: 33 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
+];
+
 #[no_mangle]
 pub extern "C" fn update(
     game:    &mut GameData,
@@ -226,18 +244,24 @@ pub extern "C" fn update(
     // === PROCESSING? ===
     unsafe {
         if game.controls.left.down() {
-            // game.player_pos.x -= 100.0 * delta_t;
-            game.player_angle -= 3.14159 * delta_t;
+            game.player_pos.x -= 100.0 * delta_t;
             game.flip_player = true;
         }
         if game.controls.right.down() {
-            // game.player_pos.x += 100.0 * delta_t;
-            game.player_angle += 3.14159 * delta_t;
+            game.player_pos.x += 100.0 * delta_t;
             game.flip_player = false;
+        }
+        if game.controls.up.down() {
+            game.player_angle += 3.14159 * delta_t;
+        }
+        if game.controls.down.down() {
+            game.player_angle -= 3.14159 * delta_t;
         }
         if game.controls.debug.just_down() {
             // println!("time_counter: {} | delta: {} | fps: {}", game.time_counter, delta_t, game.fps);
             game.player_angle = 0.0;
+            game.player_frame += 1;
+            if game.player_frame >= 9 { game.player_frame = 1 }
         }
 
         macro_rules! plrdata {
@@ -273,12 +297,15 @@ pub extern "C" fn update(
         );
 
         let eye_color = (((game.player_angle / 6.28 * 255.0) as u32) << 8) | 0x000000FF;
+        let eye_offset = &TEST_OFFSETS[game.player_frame as usize];
+        let eye_center = Vec2::new(2, 2);
+        let x_mul = if (game.flip_player) { Vec2::new(-1, 1) } else { Vec2::s(1) };
         sprites[0] = SpriteType3Color1 {
-            position: Vec2::new(5.0, 5.0),
+            position: game.player_pos,
             frame:    0,
-            flipped:  0,
-            angle:    game.player_angle,
-            focus:    Vec2::new(2, 0),
+            flipped:  game.flip_player as GLint,
+            angle:    game.player_angle + eye_offset.angle,
+            focus:    Vec2::new(-40, -40),
             color_swap: Vec2::new(0x5900FFFF, eye_color)
         };
         gl::UnmapBuffer(gl::ARRAY_BUFFER);
@@ -292,9 +319,9 @@ pub extern "C" fn update(
         );
 
         sprites[0] = SpriteType3Color1 {
-            position: Vec2::new(-17.0, -5.0),
+            position: game.player_pos,
             frame:    0,
-            flipped:  0,
+            flipped:  game.flip_player as GLint,
             angle:    game.player_angle,
             focus:    Vec2::new(21, 52),
             color_swap: Vec2::new(0x0094FFFF, eye_color)
@@ -329,11 +356,11 @@ pub extern "C" fn update(
             }
         };
 
-        renderplr!(gl_data.images.test_spin);
         renderplr!(gl_data.images.crattlecrute_front_foot);
-        renderplr!(gl_data.images.crattlecrute_body);
+        // renderplr!(gl_data.images.crattlecrute_body);
         renderplr!(gl_data.images.crattlecrute_back_foot);
         renderplr!(gl_data.images.eye_1);
+        renderplr!(gl_data.images.test_spin);
     }
 
     window.swap_buffers();
