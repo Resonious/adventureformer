@@ -38,5 +38,5 @@ pub fn query_performance_frequency() -> i64 {
 }
 
 pub fn watch_for_updated_game_lib(ref sender: &Sender<()>) {
-    println!("on linux machine - no hot code update for now!");
+    println!("on mac - no hot code update for now!");
 }
