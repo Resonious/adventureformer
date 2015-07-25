@@ -18,6 +18,7 @@ use std::slice;
 use render::{GLData};
 use assets::{SpriteType2Color2, SpriteType3Color1};
 use controls::Controls;
+use std::f32::consts::PI;
 
 macro_rules! check_error(
     () => (
@@ -159,17 +160,17 @@ struct Offset {
     pub angle: GLfloat
 }
 
-// THIS WILL BE GENERATED
+// THIS IS GENERATED
 static TEST_OFFSETS: [Offset; 9] = [
-    Offset { pos: Vec2::<GLint> { x: 29, y: 33 }, angle: 0.000000 },
-    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
-    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
-    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
-    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
-    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
-    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
-    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
-    Offset { pos: Vec2::<GLint> { x: 30, y: 33 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 16, y: 21 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 17, y: 21 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 18, y: 20 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 18, y: 20 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 17, y: 20 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 17, y: 21 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 18, y: 20 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 18, y: 20 }, angle: 0.000000 },
+    Offset { pos: Vec2::<GLint> { x: 17, y: 20 }, angle: 0.000000 },
 ];
 
 #[no_mangle]
@@ -253,15 +254,25 @@ pub extern "C" fn update(
             game.flip_player = false;
         }
         if game.controls.up.down() {
-            game.player_angle += 3.14159 * delta_t;
+            if game.flip_player {
+                game.player_angle -= 3.14159 * delta_t;
+            }
+            else {
+                game.player_angle += 3.14159 * delta_t;
+            }
         }
         if game.controls.down.down() {
-            game.player_angle -= 3.14159 * delta_t;
+            if game.flip_player {
+                game.player_angle += 3.14159 * delta_t;
+            }
+            else {
+                game.player_angle -= 3.14159 * delta_t;
+            }
         }
         if game.controls.debug.just_down() {
-            println!("Time: {}", time);
+            // println!("Time: {}", time);
 
-            game.player_angle = 0.0;
+            // game.player_angle = 0.0;
             game.player_frame += 1;
             if game.player_frame >= 9 { game.player_frame = 1 }
         }
@@ -301,15 +312,15 @@ pub extern "C" fn update(
             1
         );
 
-        let eye_color = (((game.player_angle / 6.28 * 255.0) as u32) << 8) | 0x000000FF;
+        let eye_color = (((game.player_angle / PI * 310.0) as u32) << 8) | 0x000000FF;
         let eye_offset = &TEST_OFFSETS[game.player_frame as usize];
-        let eye_center = Vec2::new(2, 2);
+
         sprites[0] = SpriteType3Color1 {
             position: game.player_pos,
             frame:    0,
             flipped:  game.flip_player as GLint,
             angle:    game.player_angle + eye_offset.angle,
-            focus:    Vec2::new(-40, -40),
+            focus:    Vec2::new(2, 0) - eye_offset.pos,
             color_swap: Vec2::new(0x5900FFFF, eye_color)
         };
         gl::UnmapBuffer(gl::ARRAY_BUFFER);
@@ -350,7 +361,7 @@ pub extern "C" fn update(
         gl::ClearColor(0.2, 0.2, 0.3, 1.0);
         gl::Clear(gl::COLOR_BUFFER_BIT);
 
-        macro_rules! renderplr {
+        macro_rules! renderthing {
             ($img:expr) => {
                 $img.set();
                 gl::DrawElementsInstanced(
@@ -360,11 +371,11 @@ pub extern "C" fn update(
             }
         };
 
-        renderplr!(gl_data.images.crattlecrute_front_foot);
-        // renderplr!(gl_data.images.crattlecrute_body);
-        renderplr!(gl_data.images.crattlecrute_back_foot);
-        renderplr!(gl_data.images.eye_1);
-        renderplr!(gl_data.images.test_spin);
+        // renderthing!(gl_data.images.test_spin);
+        renderthing!(gl_data.images.crattlecrute_back_foot);
+        renderthing!(gl_data.images.crattlecrute_body);
+        renderthing!(gl_data.images.crattlecrute_front_foot);
+        renderthing!(gl_data.images.eye_1);
     }
 
     window.swap_buffers();
