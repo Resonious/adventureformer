@@ -334,7 +334,7 @@ pub extern "C" fn update(
         );
 
         sprites[0] = SpriteType3Color1 {
-            position: game.player_pos,
+            position: Vec2::new(game.player_angle, game.player_pos.y),
             frame:    0,
             flipped:  game.flip_player as GLint,
             angle:    game.player_angle,
@@ -371,7 +371,7 @@ pub extern "C" fn update(
             }
         };
 
-        // renderthing!(gl_data.images.test_spin);
+        renderthing!(gl_data.images.test_spin);
         renderthing!(gl_data.images.crattlecrute_back_foot);
         renderthing!(gl_data.images.crattlecrute_body);
         renderthing!(gl_data.images.crattlecrute_front_foot);

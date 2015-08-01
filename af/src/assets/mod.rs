@@ -131,14 +131,13 @@ SpriteType3Color1:
          vec2 pixel_screen_pos = (position - cam_pos) * 2.0;
          vec2 effective_focus = flipped == 0 ?
              vec2(focus) : vec2(sprite_size.x - float(focus.x), focus.y);
-         vec2 rel_focus = effective_focus / sprite_size * 2.0;
 
-         vec2 vert_offset = (vertex_pos - rel_focus) * from_pixel(sprite_size);
-         float vert_angle = angle + atan(vert_offset.y, vert_offset.x);
-         vec2 direction   = vec2(cos(vert_angle), sin(vert_angle));
-         float distance   = sqrt(dot(vert_offset, vert_offset));
+         vec2 pixel_offset = vertex_pos * sprite_size - effective_focus * 2.0;
+         float pixel_angle = angle + atan(pixel_offset.y, pixel_offset.x);
+         vec2 direction    = vec2(cos(pixel_angle), sin(pixel_angle));
+         float distance    = sqrt(dot(pixel_offset, pixel_offset));
 
-         vec2 vert = distance * direction;
+         vec2 vert = from_pixel(distance * direction);
 
          gl_Position = vec4(
              (vert + from_pixel(pixel_screen_pos)) * scale,
