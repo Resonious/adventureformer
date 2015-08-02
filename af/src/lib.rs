@@ -55,10 +55,12 @@ pub struct CrattleCrute {
     frame:    GLint,
     flipped:  bool,
     angle:    GLfloat,
-    // Colors are x=primary, y=secondary
+
+    // Vec2 colors are x=primary, y=secondary
     body_color:       Vec2<u32>,
     left_foot_color:  Vec2<u32>,
-    right_foot_color: Vec2<u32>
+    right_foot_color: Vec2<u32>,
+    eye_color: u32
 }
 
 impl CrattleCrute {
@@ -89,6 +91,18 @@ impl CrattleCrute {
             Vec2::new(0xFF0000FF, self.right_foot_color.x),
             Vec2::new(0xDB002FFF, self.right_foot_color.y)
         )
+    }
+    pub fn eye_sprite(&self) -> SpriteType3Color1 {
+        let offset = &TEST_OFFSETS[self.frame as usize];
+
+        SpriteType3Color1 {
+            position: self.position,
+            frame:    0,
+            flipped:  self.flipped as GLint,
+            angle:    self.angle + offset.angle,
+            focus:    Vec2::new(2, 0) - offset.pos,
+            color_swap: Vec2::new(0x5900FFFF, self.eye_color)
+        }
     }
 }
 
@@ -129,11 +143,13 @@ pub unsafe extern "C" fn load(
         game.player.body_color       = Vec2::new(0x0026FFFF, 0x1979FFFF);
         game.player.left_foot_color  = p1footcolor;
         game.player.right_foot_color = p1footcolor;
+        game.player.eye_color        = 0xDD304AFF;
 
         let goddamn_color2 = Vec2::new(0xD66FC8FF, 0xD693E4FF);
         game.player2.body_color       = goddamn_color2;
         game.player2.left_foot_color  = goddamn_color2;
         game.player2.right_foot_color = goddamn_color2;
+        game.player2.eye_color        = goddamn_color2.x;
         game.player2.position = Vec2::new(-40.0, -40.0);
 
 
@@ -242,6 +258,8 @@ pub extern "C" fn update(
         game.fps = game.frame_counter;
         game.frame_counter = 0;
         game.time_counter = 0.0;
+        game.player2.frame += 1;
+        if game.player2.frame >= 9 { game.player2.frame = 1 }
     }
 
     glfw.poll_events();
@@ -332,12 +350,15 @@ pub extern "C" fn update(
         }
 
         macro_rules! plrdata {
-            ($($img:ident|$render:ident),+) => {
+            ($($img:ident|$render:ident|$sprite:ty),+) => {
                 $({
                     gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.images.$img.vbo);
                     let buffer  = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
-                    let sprites = slice::from_raw_parts_mut::<SpriteType2Color2>(
+                    let sprites = slice::from_raw_parts_mut::<$sprite>(
                         transmute(buffer),
+                        // NOTE
+                        // This is contingent on how large the buffer we made in the
+                        // loading routine is.
                         2 // TODO <- number of players
                     );
                     // This should be a loop through sorted draw calls on for this texture.
@@ -349,31 +370,11 @@ pub extern "C" fn update(
             }
         };
         plrdata!(
-            crattlecrute_front_foot| right_foot_sprite,
-            crattlecrute_body      |       body_sprite,
-            crattlecrute_back_foot |  left_foot_sprite
+            eye_1                   | eye_sprite        | SpriteType3Color1,
+            crattlecrute_front_foot | right_foot_sprite | SpriteType2Color2,
+            crattlecrute_body       | body_sprite       | SpriteType2Color2,
+            crattlecrute_back_foot  | left_foot_sprite  | SpriteType2Color2
         );
-
-        // === Draw test eye ===
-        gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.images.eye_1.vbo);
-        let buffer = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
-        let sprites = slice::from_raw_parts_mut::<SpriteType3Color1>(
-            transmute(buffer),
-            1
-        );
-
-        let eye_color = (((game.player.angle / PI * 310.0) as u32) << 8) | 0x000000FF;
-        let eye_offset = &TEST_OFFSETS[game.player.frame as usize];
-
-        sprites[0] = SpriteType3Color1 {
-            position: game.player.position,
-            frame:    0,
-            flipped:  game.player.flipped as GLint,
-            angle:    game.player.angle + eye_offset.angle,
-            focus:    Vec2::new(2, 0) - eye_offset.pos,
-            color_swap: Vec2::new(0x5900FFFF, eye_color)
-        };
-        gl::UnmapBuffer(gl::ARRAY_BUFFER);
 
         // === Draw test spinning body ===
         gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.images.test_spin.vbo);
@@ -389,7 +390,7 @@ pub extern "C" fn update(
             flipped:  !game.player.flipped as GLint,
             angle:    game.player.angle,
             focus:    Vec2::new(21, 52),
-            color_swap: Vec2::new(0x0094FFFF, eye_color)
+            color_swap: Vec2::new(0x0094FFFF, game.player.eye_color)
         };
         gl::UnmapBuffer(gl::ARRAY_BUFFER);
 
@@ -425,7 +426,7 @@ pub extern "C" fn update(
         renderthing!(gl_data.images.crattlecrute_back_foot, 2);
         renderthing!(gl_data.images.crattlecrute_body, 2);
         renderthing!(gl_data.images.crattlecrute_front_foot, 2);
-        renderthing!(gl_data.images.eye_1, 1);
+        renderthing!(gl_data.images.eye_1, 2);
     }
 
     window.swap_buffers();
