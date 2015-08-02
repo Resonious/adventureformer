@@ -50,19 +50,57 @@ macro_rules! stride(
     ($val:expr) => (($val * size_of::<GLfloat>() as i32))
 );
 
+pub struct CrattleCrute {
+    position: Vec2<GLfloat>,
+    frame:    GLint,
+    flipped:  bool,
+    angle:    GLfloat,
+    // Colors are x=primary, y=secondary
+    body_color:       Vec2<u32>,
+    left_foot_color:  Vec2<u32>,
+    right_foot_color: Vec2<u32>
+}
+
+impl CrattleCrute {
+    fn sprite(&self, color_swap_1: Vec2<u32>, color_swap_2: Vec2<u32>) -> SpriteType2Color2 {
+        SpriteType2Color2 {
+            position: self.position,
+            frame:    self.frame,
+            flipped:  self.flipped as GLint,
+            angle:    self.angle,
+            color_swap_1: color_swap_1,
+            color_swap_2: color_swap_2
+        }
+    }
+    pub fn body_sprite(&self) -> SpriteType2Color2 {
+        self.sprite(
+            Vec2::new(0x0094FFFF, self.body_color.x),
+            Vec2::new(0x00C7FFFF, self.body_color.y)
+        )
+    }
+    pub fn left_foot_sprite(&self) -> SpriteType2Color2 {
+        self.sprite(
+            Vec2::new(0xFF0000FF, self.left_foot_color.x),
+            Vec2::new(0xDB002FFF, self.left_foot_color.y)
+        )
+    }
+    pub fn right_foot_sprite(&self) -> SpriteType2Color2 {
+        self.sprite(
+            Vec2::new(0xFF0000FF, self.right_foot_color.x),
+            Vec2::new(0xDB002FFF, self.right_foot_color.y)
+        )
+    }
+}
+
 pub struct GameData {
     pub fps: i32,
     pub time_counter: f32,
     pub frame_counter: i32,
 
     pub cam_pos: Vec2<GLfloat>,
-
     pub controls: Controls,
-
-    pub player_pos: Vec2<GLfloat>,
-    pub player_angle: GLfloat,
-    pub flip_player: bool,
-    pub player_frame: GLint
+    pub player: CrattleCrute,
+    pub player2: CrattleCrute
 }
 
 extern "C" {
@@ -86,6 +124,18 @@ pub unsafe extern "C" fn load(
         // ============== Game ================
         game.cam_pos.x = 0.0;
         game.cam_pos.y = 0.0;
+
+        let p1footcolor = Vec2::new(0xBB98E2FF, 0x9F67E0FF);
+        game.player.body_color       = Vec2::new(0x0026FFFF, 0x1979FFFF);
+        game.player.left_foot_color  = p1footcolor;
+        game.player.right_foot_color = p1footcolor;
+
+        let goddamn_color2 = Vec2::new(0xD66FC8FF, 0xD693E4FF);
+        game.player2.body_color       = goddamn_color2;
+        game.player2.left_foot_color  = goddamn_color2;
+        game.player2.right_foot_color = goddamn_color2;
+        game.player2.position = Vec2::new(-40.0, -40.0);
+
 
         // ============== OpenGL ================
         // Defying borrow checker here:
@@ -137,12 +187,13 @@ pub unsafe extern "C" fn load(
         gl_data.images.crattlecrute_back_foot.load();
         gl_data.images.eye_1.load();
         gl_data.images.test_spin.load();
-        // TODO Just one player for now
-        gl_data.images.crattlecrute_front_foot.empty_buffer_data(1, gl::DYNAMIC_DRAW);
-        gl_data.images.crattlecrute_body.empty_buffer_data(1, gl::DYNAMIC_DRAW);
-        gl_data.images.crattlecrute_back_foot.empty_buffer_data(1, gl::DYNAMIC_DRAW);
-        gl_data.images.eye_1.empty_buffer_data(1, gl::DYNAMIC_DRAW);
-        gl_data.images.test_spin.empty_buffer_data(1, gl::DYNAMIC_DRAW);
+        // TODO Just TWO players for now
+        let plr_count = 2;
+        gl_data.images.crattlecrute_front_foot.empty_buffer_data(plr_count, gl::DYNAMIC_DRAW);
+        gl_data.images.crattlecrute_body.empty_buffer_data(plr_count, gl::DYNAMIC_DRAW);
+        gl_data.images.crattlecrute_back_foot.empty_buffer_data(plr_count, gl::DYNAMIC_DRAW);
+        gl_data.images.eye_1.empty_buffer_data(plr_count, gl::DYNAMIC_DRAW);
+        gl_data.images.test_spin.empty_buffer_data(plr_count, gl::DYNAMIC_DRAW);
     }
     else {
         let failed = assets::Shaders::compile(gl_data, window);
@@ -246,63 +297,62 @@ pub extern "C" fn update(
     // === PROCESSING? ===
     unsafe {
         if game.controls.left.down() {
-            game.player_pos.x -= 100.0 * delta_t;
-            game.flip_player = true;
+            game.player.position.x -= 100.0 * delta_t;
+            game.player.flipped = true;
         }
         if game.controls.right.down() {
-            game.player_pos.x += 100.0 * delta_t;
-            game.flip_player = false;
+            game.player.position.x += 100.0 * delta_t;
+            game.player.flipped = false;
         }
         if game.controls.up.down() {
-            if game.flip_player {
-                game.player_angle -= 3.14159 * delta_t;
+            if game.player.flipped {
+                game.player.angle -= 3.14159 * delta_t;
             }
             else {
-                game.player_angle += 3.14159 * delta_t;
+                game.player.angle += 3.14159 * delta_t;
             }
         }
         if game.controls.down.down() {
-            if game.flip_player {
-                game.player_angle += 3.14159 * delta_t;
+            if game.player.flipped {
+                game.player.angle += 3.14159 * delta_t;
             }
             else {
-                game.player_angle -= 3.14159 * delta_t;
+                game.player.angle -= 3.14159 * delta_t;
             }
         }
         if game.controls.debug.just_down() {
             // println!("Time: {}", time);
 
-            // game.player_angle = 0.0;
-            game.player_frame += 1;
-            if game.player_frame >= 9 { game.player_frame = 1 }
+            // game.player.angle = 0.0;
+            game.player.frame += 1;
+            if game.player.frame >= 9 { game.player.frame = 1 }
         }
         if delta_t < 0.0 {
             println!("Delta time < 0!!! {}", delta_t);
         }
 
         macro_rules! plrdata {
-            ($($img:ident),+) => {
+            ($($img:ident|$render:ident),+) => {
                 $({
-                gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.images.$img.vbo);
-                let buffer  = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
-                let sprites = slice::from_raw_parts_mut::<SpriteType2Color2>(
-                    transmute(buffer),
-                    1 // TODO <- number of players
-                );
-                // This should be a loop through sorted draw calls on for this texture.
-                sprites[0] = SpriteType2Color2 {
-                    position: game.player_pos,
-                    frame:    game.player_frame,
-                    flipped:  game.flip_player as GLint,
-                    angle:    game.player_angle,
-                    color_swap_1: Vec2::new(0x0094FFFF, 0x2B06D3FF),
-                    color_swap_2: Vec2::new(0x00C7FFFF, 0x3071D3FF)
-                };
-                gl::UnmapBuffer(gl::ARRAY_BUFFER);
+                    gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.images.$img.vbo);
+                    let buffer  = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
+                    let sprites = slice::from_raw_parts_mut::<SpriteType2Color2>(
+                        transmute(buffer),
+                        2 // TODO <- number of players
+                    );
+                    // This should be a loop through sorted draw calls on for this texture.
+                    sprites[0] = game.player.$render();
+                    sprites[1] = game.player2.$render();
+                    gl::UnmapBuffer(gl::ARRAY_BUFFER);
+                    gl::BindBuffer(gl::ARRAY_BUFFER, 0);
                 });*
             }
         };
-        plrdata!(crattlecrute_front_foot, crattlecrute_body, crattlecrute_back_foot);
+        plrdata!(
+            crattlecrute_front_foot| right_foot_sprite,
+            crattlecrute_body      |       body_sprite,
+            crattlecrute_back_foot |  left_foot_sprite
+        );
 
         // === Draw test eye ===
         gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.images.eye_1.vbo);
@@ -312,14 +362,14 @@ pub extern "C" fn update(
             1
         );
 
-        let eye_color = (((game.player_angle / PI * 310.0) as u32) << 8) | 0x000000FF;
-        let eye_offset = &TEST_OFFSETS[game.player_frame as usize];
+        let eye_color = (((game.player.angle / PI * 310.0) as u32) << 8) | 0x000000FF;
+        let eye_offset = &TEST_OFFSETS[game.player.frame as usize];
 
         sprites[0] = SpriteType3Color1 {
-            position: game.player_pos,
+            position: game.player.position,
             frame:    0,
-            flipped:  game.flip_player as GLint,
-            angle:    game.player_angle + eye_offset.angle,
+            flipped:  game.player.flipped as GLint,
+            angle:    game.player.angle + eye_offset.angle,
             focus:    Vec2::new(2, 0) - eye_offset.pos,
             color_swap: Vec2::new(0x5900FFFF, eye_color)
         };
@@ -334,10 +384,10 @@ pub extern "C" fn update(
         );
 
         sprites[0] = SpriteType3Color1 {
-            position: Vec2::new(game.player_angle, game.player_pos.y),
+            position: Vec2::new(game.player.angle, game.player.position.y),
             frame:    0,
-            flipped:  game.flip_player as GLint,
-            angle:    game.player_angle,
+            flipped:  !game.player.flipped as GLint,
+            angle:    game.player.angle,
             focus:    Vec2::new(21, 52),
             color_swap: Vec2::new(0x0094FFFF, eye_color)
         };
@@ -362,20 +412,20 @@ pub extern "C" fn update(
         gl::Clear(gl::COLOR_BUFFER_BIT);
 
         macro_rules! renderthing {
-            ($img:expr) => {
+            ($img:expr, $count:expr) => {
                 $img.set();
                 gl::DrawElementsInstanced(
                 // TODO last argument here will be number of render calls counted for player!
-                    gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null(), 1
+                    gl::TRIANGLES, 6, gl::UNSIGNED_INT, ptr::null(), $count
                 );
             }
         };
 
-        renderthing!(gl_data.images.test_spin);
-        renderthing!(gl_data.images.crattlecrute_back_foot);
-        renderthing!(gl_data.images.crattlecrute_body);
-        renderthing!(gl_data.images.crattlecrute_front_foot);
-        renderthing!(gl_data.images.eye_1);
+        renderthing!(gl_data.images.test_spin, 1);
+        renderthing!(gl_data.images.crattlecrute_back_foot, 2);
+        renderthing!(gl_data.images.crattlecrute_body, 2);
+        renderthing!(gl_data.images.crattlecrute_front_foot, 2);
+        renderthing!(gl_data.images.eye_1, 1);
     }
 
     window.swap_buffers();
