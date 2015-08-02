@@ -251,20 +251,12 @@ macro_rules! shader_assets {
                         vec4 color_from(int color)
                         {
                             // Totally assumes little endian...
-                            /*
-                            return vec4(
-                                float((color & 0xFF000000u) / (256 * 3)) / 255.0,
-                                float((color & 0x00FF0000u) / (256 * 2)) / 255.0,
-                                float((color & 0x0000FF00u) / (256 * 1)) / 255.0,
-                                float( color & 0x000000FFu)              / 255.0
-                            );
-                            */
                             int red = int((uint(color) & 0xFF000000u) >> 24u);
                             return vec4(
                                 float(red) / 256.0,
                                 float((color & 0x00FF0000) >> 16) / 256.0,
                                 float((color & 0x0000FF00) >> 8)  / 256.0,
-                                float( color & 0x000000FF)         / 256.0
+                                float( color & 0x000000FF)        / 256.0
                             );
                         }
                     ");
