@@ -11,12 +11,12 @@ use gl::types::*;
 use std::sync::mpsc::Receiver;
 use glfw::{Action, Context, Key};
 use libc::{c_void};
-use vecmath::Vec2;
+use vecmath::{Vec2, Rect};
 use std::mem::{size_of, size_of_val, transmute};
 use std::ptr;
 use std::slice;
 use render::{GLData};
-use assets::{SpriteType2Color2, SpriteType3Color1};
+use assets::{SpriteType2Color2, SpriteType3Color1, SpriteType1};
 use controls::Controls;
 use std::f32::consts::PI;
 
@@ -114,7 +114,10 @@ pub struct GameData {
     pub cam_pos: Vec2<GLfloat>,
     pub controls: Controls,
     pub player: CrattleCrute,
-    pub player2: CrattleCrute
+    pub player2: CrattleCrute,
+
+    pub gravity: GLfloat, // pixels per second
+    pub ground_rect: Rect
 }
 
 extern "C" {
@@ -134,6 +137,8 @@ pub unsafe extern "C" fn load(
     println!("LOAD!");
     glfwSet(glfw_data);
     gl::load_with(|s| window.get_proc_address(s));
+
+    game.gravity = 100.0; // update gravity on every load
     if first_load {
         // ============== Game ================
         game.cam_pos.x = 0.0;
@@ -210,8 +215,33 @@ pub unsafe extern "C" fn load(
         gl_data.images.crattlecrute_back_foot.empty_buffer_data(plr_count, gl::DYNAMIC_DRAW);
         gl_data.images.eye_1.empty_buffer_data(plr_count, gl::DYNAMIC_DRAW);
         gl_data.images.test_spin.empty_buffer_data(plr_count, gl::DYNAMIC_DRAW);
+
+        // Fill static dirt:
+        gl_data.images.dirt_1.load();
+        gl_data.images.dirt_1.empty_buffer_data(6, gl::STATIC_DRAW);
+
+        gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.images.dirt_1.vbo);
+        let buffer = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
+        let sprites = slice::from_raw_parts_mut::<SpriteType1>(
+            transmute(buffer), 6
+        );
+
+        game.ground_rect = Rect::new(-40.0, -70.0, 16.0 * 6.0, 16.0);
+        for i in 0..(game.ground_rect.width() / 16.0) as usize {
+            sprites[i] = SpriteType1 {
+                position: Vec2::new(
+                    (16 * i) as GLfloat + game.ground_rect.x1,
+                    game.ground_rect.y1
+                ),
+                frame: 0,
+                flipped: false as GLint
+            }
+        }
+        gl::UnmapBuffer(gl::ARRAY_BUFFER);
+        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
     }
     else {
+        // Re-load whatever needs to be reloaded.
         let failed = assets::Shaders::compile(gl_data, window);
         if failed.len() > 0 {
             println!("Shaders: {:?} failed to compile and were not reloaded.", failed);
@@ -349,6 +379,28 @@ pub extern "C" fn update(
             println!("Delta time < 0!!! {}", delta_t);
         }
 
+    }
+
+    // === PHYSICS! ===
+    // make player fall and bounce back up after awhile -- gravity is a velocity here.
+    game.player.position.y -= game.gravity * delta_t;
+    if game.player.position.y < -100.0 {
+        game.player.position.y = 200.0;
+    }
+
+    // === RENDER ===
+    unsafe {
+        gl_data.shaders.each_shader(|shader, _name| {
+            gl::UseProgram(shader.program);
+            match new_window_size {
+                Some((width, height)) =>
+                    gl::Uniform2f(shader.screen_size_uniform, width, height),
+                None => {}
+            }
+            gl::Uniform2f(shader.cam_pos_uniform, game.cam_pos.x, game.cam_pos.y);
+        });
+
+
         macro_rules! plrdata {
             ($($img:ident|$render:ident|$sprite:ty),+) => {
                 $({
@@ -365,7 +417,6 @@ pub extern "C" fn update(
                     sprites[0] = game.player.$render();
                     sprites[1] = game.player2.$render();
                     gl::UnmapBuffer(gl::ARRAY_BUFFER);
-                    gl::BindBuffer(gl::ARRAY_BUFFER, 0);
                 });*
             }
         };
@@ -377,6 +428,7 @@ pub extern "C" fn update(
         );
 
         // === Draw test spinning body ===
+        /*
         gl::BindBuffer(gl::ARRAY_BUFFER, gl_data.images.test_spin.vbo);
         let buffer = gl::MapBuffer(gl::ARRAY_BUFFER, gl::WRITE_ONLY);
         let sprites = slice::from_raw_parts_mut::<SpriteType3Color1>(
@@ -393,21 +445,9 @@ pub extern "C" fn update(
             color_swap: Vec2::new(0x0094FFFF, game.player.eye_color)
         };
         gl::UnmapBuffer(gl::ARRAY_BUFFER);
+        */
 
         gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-    }
-
-    // === RENDER ===
-    unsafe {
-        gl_data.shaders.each_shader(|shader, _name| {
-            gl::UseProgram(shader.program);
-            match new_window_size {
-                Some((width, height)) =>
-                    gl::Uniform2f(shader.screen_size_uniform, width, height),
-                None => {}
-            }
-            gl::Uniform2f(shader.cam_pos_uniform, game.cam_pos.x, game.cam_pos.y);
-        });
 
         gl::ClearColor(0.2, 0.2, 0.3, 1.0);
         gl::Clear(gl::COLOR_BUFFER_BIT);
@@ -422,11 +462,11 @@ pub extern "C" fn update(
             }
         };
 
-        renderthing!(gl_data.images.test_spin, 1);
         renderthing!(gl_data.images.crattlecrute_back_foot, 2);
         renderthing!(gl_data.images.crattlecrute_body, 2);
         renderthing!(gl_data.images.crattlecrute_front_foot, 2);
         renderthing!(gl_data.images.eye_1, 2);
+        renderthing!(gl_data.images.dirt_1, 6);
     }
 
     window.swap_buffers();

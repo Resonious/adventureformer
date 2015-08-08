@@ -238,7 +238,7 @@ impl Texture {
     }
 
     // NOTE this expects #generate_texcoords_buffer to have been called
-    // if there are frames. "
+    // if there are frames.
     pub fn set(&self, sampler_uniform:     GLint,
                       sprite_size_uniform: GLint,
                       frames_uniform:      GLint,

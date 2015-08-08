@@ -16,7 +16,8 @@ image_assets!(
     ccbft crattlecrute_back_foot:  SpriteType2Color2 [9][90;90] "assets/crattlecrute/back-foot.png",
     ccfft crattlecrute_front_foot: SpriteType2Color2 [9][90;90] "assets/crattlecrute/front-foot.png",
     ceye1 eye_1:     SpriteType3Color1 [1][4;5] "assets/eyes/standard-eye.png",
-    tstsp test_spin: SpriteType3Color1 [9][90;90] "assets/crattlecrute/body.png"
+    tstsp test_spin: SpriteType3Color1 [9][90;90] "assets/crattlecrute/body.png",
+    dirt1 dirt_1:    SpriteType1 [1][16;16] "assets/terrain/dirt1.png"
 );
 
 shader_assets!(
